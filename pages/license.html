@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>LT-Security</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-image: url('/s/images/License_background.png');
+      background-size: cover;
+      background-position: center;
+      min-height: 100dvh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px; 
+    }
+
+    #back {
+      cursor: pointer;
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      width: 120px;
+      height: 45px;
+      color: white;
+      background-color: black;
+      border: solid 2px white;
+      border-radius: 15px;
+      transition-duration: 100ms;
+      z-index: 20;
+    }
+    #back:active { transform: translateX(-5px) scale(0.95); }
+
+    .license-box {
+      width: 800px;
+      max-width: 100%;
+      padding: 30px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+      color: #f0f0f0;
+      box-shadow: 0 0 20px rgba(99, 99, 99, 0.4);
+      line-height: 1.6;
+      font-size: 21px;
+      animation: fadeIn 0.6s ease-out;
+    }
+
+    .license-box h1 {
+      font-size: 28px;
+      margin-bottom: 20px;
+      text-align: center;
+      color: #ffffff;
+      user-select: none;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    
+    @media (max-width: 600px) {
+      body {
+        padding: 15px;
+      }
+
+      #back {
+        width: 90px;
+        height: 38px;
+        font-size: 14px;
+        top: 10px;
+        left: 10px;
+        border-radius: 12px;
+      }
+
+      .license-box {
+        padding: 20px;
+        font-size: 17px;
+        border-radius: 15px;
+      }
+
+      .license-box h1 {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <button id="back">Назад</button>
+
+  <div class="license-box">
+    <h1>Лицензионное соглашение</h1>
+    <p>Мы храним ваши данные в Хэшированном виде Bcrypt.</p>
+    <p><strong>Трафик защищен от MITM, с помощью TLS.</strong></p>
+    <p>База данных и сервер надёжно защищены LTeam Командой.</p>
+    <p>Принимая это соглашение, вы разрешаете использовать Публичный IP-адрес вашего провайдера <strong>только в случае нарушения правил</strong>, для возможной передачи в правоохранительные органы.</p>
+    <p>Мы не передаём ваши данные третьим лицам и не используем их в коммерческих целях.</p>
+    <p>Мы также можем использовать ваши интересы (любимые фильмы, увлечения, темы оформления) <strong>исключительно</strong> для улучшения качества продукта и пользовательского опыта.</p>
+  </div>
+
+  <script>
+    document.getElementById("back").addEventListener("click", () => {
+        window.location.href = "/";
+    });
+  </script>
+</body>
+</html>
