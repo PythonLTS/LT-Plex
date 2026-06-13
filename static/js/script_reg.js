@@ -37,10 +37,6 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   sign.addEventListener("click", () => {
-    if (!checkbox.checked){
-      showNotification("Примите Соглашение", "rgba(0,0,0,0.15)", "rgb(255,255,255)");
-      return;
-    }
     window.location.href = "/sign";
   });
 

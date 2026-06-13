@@ -2,18 +2,20 @@ package main
 
 import (
 	"encoding/json"
-	"net/http"
-	"os"
-	"time"
-	"math/rand"
-	"strconv"
-	"strings"
 	"io/ioutil"
 	"log"
+	"math/rand"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync" // Добавлено для потокобезопасности
+	"time"
+
+	"github.com/golang-jwt/jwt"
 	"github.com/skip2/go-qrcode"
 	"go.etcd.io/bbolt"
 	"golang.org/x/crypto/bcrypt"
-	"github.com/golang-jwt/jwt"
 )
 
 var base *bbolt.DB
@@ -26,7 +28,9 @@ type QRSession struct {
 	CreatedAt  time.Time
 }
 
+// Мапа сессий и мьютекс для защиты от race condition
 var qrSessions = make(map[string]*QRSession)
+var qrMutex sync.RWMutex
 
 type User struct {
 	Username string `json:"Username"`
@@ -40,10 +44,10 @@ type Claims struct {
 
 func allFilmsPage(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("jwt")
-        if err != nil {
-                http.Error(w, "неавторизован", http.StatusUnauthorized)
-                return
-        }
+	if err != nil {
+		http.Redirect(w, r, "/sign", http.StatusSeeOther)
+		return
+	}
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(cookie.Value, claims, func(t *jwt.Token) (interface{}, error) {
 		return jwtKey, nil
@@ -55,6 +59,7 @@ func allFilmsPage(w http.ResponseWriter, r *http.Request) {
 
 	http.ServeFile(w, r, "pages/filmList.html")
 }
+
 func scanFilms() []map[string]string {
 	root := "Films"
 	entries, err := ioutil.ReadDir(root)
@@ -90,19 +95,21 @@ func scanFilms() []map[string]string {
 }
 
 func filmsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("filmsHandler")
 	cookie, err := r.Cookie("jwt")
-        if err != nil {
-                http.Error(w, "неавторизован", http.StatusUnauthorized)
-                return
+	log.Println("cookie: ",cookie)
+	if err != nil {
+		http.Error(w, "неавторизован", http.StatusUnauthorized)
+		return
 	}
 	claims := &Claims{}
-        token, err := jwt.ParseWithClaims(cookie.Value, claims, func(t *jwt.Token) (interface{}, error) {
-                return jwtKey, nil
-        })
+	token, err := jwt.ParseWithClaims(cookie.Value, claims, func(t *jwt.Token) (interface{}, error) {
+		return jwtKey, nil
+	})
 	if err != nil || !token.Valid {
-                http.Redirect(w, r, "/sign", http.StatusSeeOther)
-                return
-        }
+		http.Redirect(w, r, "/sign", http.StatusSeeOther)
+		return
+	}
 	list := scanFilms()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(list)
@@ -231,8 +238,6 @@ func profileDataHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-
-
 func qrStatus(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
@@ -240,7 +245,12 @@ func qrStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if session, ok := qrSessions[token]; ok && session.Authorized {
+	// Потокобезопасное чтение мапы сессий
+	qrMutex.RLock()
+	session, ok := qrSessions[token]
+	qrMutex.RUnlock()
+
+	if ok && session.Authorized {
 		jwtToken, err := generateToken(session.Username)
 		if err != nil {
 			http.Error(w, "token error", http.StatusInternalServerError)
@@ -257,7 +267,10 @@ func qrStatus(w http.ResponseWriter, r *http.Request) {
 			Secure:   true,
 		})
 
+		// Потокобезопасное удаление из мапы
+		qrMutex.Lock()
 		delete(qrSessions, token)
+		qrMutex.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -290,9 +303,16 @@ func qrConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if session, ok := qrSessions[token]; ok {
+	// Потокобезопасное изменение сессии
+	qrMutex.Lock()
+	session, ok := qrSessions[token]
+	if ok {
 		session.Authorized = true
 		session.Username = claims.Username
+	}
+	qrMutex.Unlock()
+
+	if ok {
 		w.Write([]byte("ok"))
 	} else {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -301,10 +321,14 @@ func qrConfirm(w http.ResponseWriter, r *http.Request) {
 
 func pushqr(w http.ResponseWriter, r *http.Request) {
 	token := strconv.FormatInt(time.Now().UnixNano(), 10) + "_" + strconv.Itoa(rand.Intn(100000))
+
+	// Потокобезопасное добавление сессии
+	qrMutex.Lock()
 	qrSessions[token] = &QRSession{
 		Token:     token,
 		CreatedAt: time.Now(),
 	}
+	qrMutex.Unlock()
 
 	url := "https://lteam.sec/data-confirm?token=" + token
 
@@ -318,7 +342,6 @@ func pushqr(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-QR-Token", token)
 	w.Write(png)
 }
-
 
 func init_DB() {
 	os.MkdirAll(".secure", 0755)
@@ -335,7 +358,11 @@ func init_DB() {
 }
 
 func hashData(password string) string {
-	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println("Ошибка хэширования пароля:", err)
+		return ""
+	}
 	return string(hash)
 }
 
@@ -433,12 +460,17 @@ func getdataRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hashed := hashData(u.Password)
+	if hashed == "" {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
 	result := adduser(u.Username, hashed)
 
 	if result == "exists" {
 		log.Println("имя уже занято")
-		w.WriteHeader(http.StatusOK) 
-    		w.Write([]byte("exists"))
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("exists"))
 		return
 	}
 
@@ -448,19 +480,19 @@ func getdataRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	// ИСПРАВЛЕНО: Сразу авторизуем пользователя через куку при успешной регистрации
 	http.SetCookie(w, &http.Cookie{
-	    Name:     "jwt",
-	    Value:    token,
-	    Path:     "/",
-	    HttpOnly: true,
-	    MaxAge:   86400,
-	    Secure:   true,
+		Name:     "jwt",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   86400,
+		Secure:   true,
 	})
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
-	}
+	w.Write([]byte("ok")) // Фронтенд считает "ok" и поймет, что всё успешно
+}
 
 func mainprofile(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("jwt")
@@ -509,11 +541,15 @@ func cleanupQRSessions() {
 	for {
 		time.Sleep(1 * time.Minute)
 		now := time.Now()
+
+		// Потокобезопасная очистка старых сессий
+		qrMutex.Lock()
 		for k, v := range qrSessions {
 			if now.Sub(v.CreatedAt) > 5*time.Minute {
 				delete(qrSessions, k)
 			}
 		}
+		qrMutex.Unlock()
 	}
 }
 
@@ -521,7 +557,7 @@ func main() {
 	init_DB()
 	defer base.Close()
 
-	http.HandleFunc("/wh", allFilmsPage)
+	http.HandleFunc("/filmsPage", allFilmsPage)
 	http.HandleFunc("/", home)
 	http.HandleFunc("/l/", licenseHandler)
 	http.HandleFunc("/api/registerData/", getdataRegister)
@@ -541,5 +577,5 @@ func main() {
 
 	go cleanupQRSessions()
 	log.Println("started")
-	http.ListenAndServeTLS(":443",".secure/certs/server.crt",".secure/certs/server.key", nil)
+	http.ListenAndServeTLS(":443", ".secure/certs/server.crt", ".secure/certs/server.key", nil)
 }

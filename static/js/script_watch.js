@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
 	const seasons = document.querySelectorAll(".season");
 	document.getElementById("back").addEventListener("click", () => {
-        window.location.href = "/wh";
+        window.location.href = "/filmsPage";
     });
     const nameElem = document.getElementsByClassName('movie-title')[0];
     const name = encodeURIComponent(nameElem.textContent.trim());
