@@ -75,7 +75,8 @@ func scanFilms() []map[string]string {
 		}
 
 		folder := e.Name()
-		logo := ""
+		// Дефолтное изображение, если ничего не найдем
+		logo := "/s/unknown.png" 
 
 		files, _ := ioutil.ReadDir(root + "/" + folder)
 		for _, f := range files {
@@ -86,7 +87,8 @@ func scanFilms() []map[string]string {
 		}
 
 		list = append(list, map[string]string{
-			"name": folder,
+			"id":   folder,                         // ID для фронта (например, "Mr_Robot")
+			"name": strings.ReplaceAll(folder, "_", " "), // Красивое имя для вывода ("Mr Robot")
 			"logo": logo,
 		})
 	}
