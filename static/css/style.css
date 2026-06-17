@@ -194,7 +194,12 @@ button.watch {
     background-color: black;
     border: solid 1px white;
 }
-button.watch:hover { box-shadow: 0 0 15px rgba(255, 255, 255, 0.4); }
+button.watch:hover {
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
+    background-color: #cecece;
+    color:black;
+
+}
 
 button.favorite {
     width: 180px;

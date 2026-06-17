@@ -11,14 +11,14 @@ import (
 	"strings"
 	"sync" // Добавлено для потокобезопасности
 	"time"
-
+	"database/sql"
+	_"github.com/mattn/go-sqlite3"
 	"github.com/golang-jwt/jwt"
 	"github.com/skip2/go-qrcode"
-	"go.etcd.io/bbolt"
 	"golang.org/x/crypto/bcrypt"
 )
 
-var base *bbolt.DB
+var base *sql.DB
 var jwtKey = []byte("xxx2")
 
 type QRSession struct {
@@ -131,48 +131,36 @@ func filmsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func favorites(username string, addMovie, removeMovie string) []string {
-	var favs []string
-	base.Update(func(tx *bbolt.Tx) error {
-		b, _ := tx.CreateBucketIfNotExists([]byte("Favorites"))
-		raw := b.Get([]byte(username))
-
-		if raw != nil {
-			json.Unmarshal(raw, &favs)
+	if addMovie != "" {
+		// Используем INSERT OR IGNORE, чтобы избежать дубликатов (благодаря UNIQUE-индексу)
+		_, err := base.Exec("INSERT OR IGNORE INTO favorites (username, movie) VALUES (?, ?)", username, addMovie)
+		if err != nil {
+			log.Println("Ошибка добавления в избранное:", err)
 		}
+	}
 
-		changed := false
-
-		if addMovie != "" {
-			exists := false
-			for _, f := range favs {
-				if f == addMovie {
-					exists = true
-					break
-				}
-			}
-			if !exists {
-				favs = append(favs, addMovie)
-				changed = true
-			}
+	if removeMovie != "" {
+		_, err := base.Exec("DELETE FROM favorites WHERE username = ? AND movie = ?", username, removeMovie)
+		if err != nil {
+			log.Println("Ошибка удаления из избранного:", err)
 		}
+	}
 
-		if removeMovie != "" {
-			for i := len(favs) - 1; i >= 0; i-- {
-				if favs[i] == removeMovie {
-					favs = append(favs[:i], favs[i+1:]...)
-					changed = true
-					break
-				}
-			}
+	// Получаем актуальный список избранного
+	rows, err := base.Query("SELECT movie FROM favorites WHERE username = ?", username)
+	var favs []string = make([]string, 0) // возвращаем пустой слайс вместо nil для JSON фронтенда
+	if err != nil {
+		log.Println("Ошибка получения списка избранного:", err)
+		return favs
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var movie string
+		if err := rows.Scan(&movie); err == nil {
+			favs = append(favs, movie)
 		}
-
-		if changed {
-			data, _ := json.Marshal(favs)
-			b.Put([]byte(username), data)
-		}
-
-		return nil
-	})
+	}
 
 	return favs
 }
@@ -360,15 +348,29 @@ func pushqr(w http.ResponseWriter, r *http.Request) {
 func init_DB() {
 	os.MkdirAll(".secure", 0755)
 	var err error
-	base, err = bbolt.Open(".secure/Database.db", 0666, nil)
+	base, err = sql.Open("sqlite3", ".secure/Database.db")
 	if err != nil {
-		return
+		log.Fatal("Ошибка открытия БД:", err)
 	}
-	base.Update(func(tx *bbolt.Tx) error {
-		tx.CreateBucketIfNotExists([]byte("Users"))
-		tx.CreateBucketIfNotExists([]byte("Favorites"))
-		return nil
-	})
+
+	// Включаем поддержку Foreign Keys и создаем таблицы
+	schema := `
+	PRAGMA foreign_keys = ON;
+	CREATE TABLE IF NOT EXISTS users (
+		username TEXT PRIMARY KEY,
+		password TEXT NOT NULL
+	);
+	CREATE TABLE IF NOT EXISTS favorites (
+		username TEXT,
+		movie TEXT,
+		PRIMARY KEY (username, movie),
+		FOREIGN KEY(username) REFERENCES users(username) ON DELETE CASCADE
+	);`
+
+	_, err = base.Exec(schema)
+	if err != nil {
+		log.Fatal("Ошибка создания таблиц:", err)
+	}
 }
 
 func hashData(password string) string {
@@ -394,23 +396,22 @@ func generateToken(username string) (string, error) {
 
 func adduser(username, password string) string {
 	var exists bool
-	base.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("Users"))
-		if b.Get([]byte(username)) != nil {
-			exists = true
-		}
-		return nil
-	})
+	// Проверяем существование пользователя через COUNT
+	err := base.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE username = ?)", username).Scan(&exists)
+	if err != nil {
+		log.Println("Ошибка проверки пользователя:", err)
+		return "error"
+	}
 
 	if exists {
 		return "exists"
 	}
 
-	base.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("Users"))
-		b.Put([]byte(username), []byte(password))
-		return nil
-	})
+	_, err = base.Exec("INSERT INTO users (username, password) VALUES (?, ?)", username, password)
+	if err != nil {
+		log.Println("Ошибка добавления пользователя:", err)
+		return "error"
+	}
 	return "ok"
 }
 
@@ -425,19 +426,18 @@ func getdataLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var storedHash []byte
-	base.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("Users"))
-		storedHash = b.Get([]byte(u.Username))
-		return nil
-	})
-
-	if storedHash == nil {
+	var storedHash string
+	// Ищем хэш пароля пользователя в БД
+	err := base.QueryRow("SELECT password FROM users WHERE username = ?", u.Username).Scan(&storedHash)
+	if err == sql.ErrNoRows {
 		http.Error(w, "Пользователь не найден", http.StatusUnauthorized)
+		return
+	} else if err != nil {
+		http.Error(w, "Ошибка базы данных", http.StatusInternalServerError)
 		return
 	}
 
-	err := bcrypt.CompareHashAndPassword(storedHash, []byte(u.Password))
+	err = bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(u.Password))
 	if err != nil {
 		http.Error(w, "Неверный Логин или Пароль", http.StatusUnauthorized)
 		return
@@ -494,7 +494,6 @@ func getdataRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ИСПРАВЛЕНО: Сразу авторизуем пользователя через куку при успешной регистрации
 	http.SetCookie(w, &http.Cookie{
 		Name:     "jwt",
 		Value:    token,
@@ -505,7 +504,7 @@ func getdataRegister(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok")) // Фронтенд считает "ok" и поймет, что всё успешно
+	w.Write([]byte("ok"))
 }
 
 func mainprofile(w http.ResponseWriter, r *http.Request) {
@@ -520,7 +519,7 @@ func mainprofile(w http.ResponseWriter, r *http.Request) {
 		return jwtKey, nil
 	})
 	if err != nil || !token.Valid {
-		http.Redirect(w, r, "/sign", http.StatusSeeOther)
+		http.Redirect(w, r, "/sign", http.StatusBadRequest)
 		return
 	}
 	http.ServeFile(w, r, "pages/profile.html")
@@ -530,8 +529,13 @@ func home(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/":
 		http.ServeFile(w, r, "pages/index.html")
+		return
 	case "/sign":
 		http.ServeFile(w, r, "pages/login.html")
+		return
+	default :
+		http.Redirect(w,r,"/",http.StatusSeeOther)
+		return
 	}
 }
 
@@ -581,7 +585,7 @@ func main() {
 	http.HandleFunc("/data-status/", qrStatus)
 	http.HandleFunc("/profile", mainprofile)
 	http.HandleFunc("/profile-data", profileDataHandler)
-	http.HandleFunc("/lt", logoutHandler)
+	http.HandleFunc("/api/logout", logoutHandler)
 	http.HandleFunc("/addfv", addFavoriteHandler)
 	http.HandleFunc("/rmfv", removeFavoriteHandler)
 	http.HandleFunc("/films", filmsHandler)

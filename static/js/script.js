@@ -12,9 +12,12 @@ document.addEventListener("DOMContentLoaded", async function() {
         });
 
         const data = await res.json();
-
+        let filtredName;
+        if (data.username.length > 7) {
+            filtredName = data.username.slice(0, 7) + "..";
+        }
         // Заполнение информации
-        document.getElementById("username").textContent = data.username;
+        document.getElementById("username").textContent = filtredName;
 
         const list = document.getElementById("List");
         list.innerHTML = ""; 
@@ -102,7 +105,7 @@ document.addEventListener("DOMContentLoaded", async function() {
             <div class="empty-msg">
                 <p style="font-size: 25px;"><strong>Нет избранных фильмов</strong></p>
                 <p style="font-size: 17px; margin-top: 10px; color: #aaa;">
-                    Перейдите во вкладку "Список фильмов", выберите понравившийся и нажмите "В избранное".
+                    Перейдите во вкладку "Хранилище", выберите понравившийся контент и нажмите "В избранное".
                 </p>
             </div>`;
     }
@@ -112,8 +115,8 @@ document.addEventListener("DOMContentLoaded", async function() {
     if (logoutBtn) {
         logoutBtn.addEventListener("click", function(e) {
             e.preventDefault();
-            if (confirm("Вы уверены, что хотите выйти из профиля?")) {
-                window.location.href = "/lt";
+            if (confirm("Вам придется заново вводить данные,Вы уверены?")) {
+                window.location.href = "/api/logout";
             }
         });
     }
