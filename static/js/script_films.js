@@ -18,7 +18,10 @@ document.addEventListener("DOMContentLoaded", async function () {
 
         const profileData = await profileRes.json();
         userFavorites = profileData.favorites || [];
-        filmsList = await filmsRes.json(); // Получаем массив {id, name, logo} с сервера
+        
+        const fetchedFilms = await filmsRes.json();
+        // ЗАЩИТА: Если бэк всё-таки прислал null, превращаем его в пустой массив
+        filmsList = fetchedFilms || []; 
     } catch (e) {
         console.error("Ошибка загрузки данных:", e);
         return;
@@ -27,12 +30,21 @@ document.addEventListener("DOMContentLoaded", async function () {
     const listContainer = document.getElementById("list");
     const mq = window.matchMedia("(max-width: 600px)");
 
+    // Создаем счетчик контента динамически
+    const counterDisplay = document.createElement("div");
+    counterDisplay.id = "film-counter";
+    document.body.insertBefore(counterDisplay, listContainer);
+
     // 2. Функция для генерации карточек фильмов на лету
     function renderFilms(films) {
         listContainer.innerHTML = ""; // Очищаем контейнер
 
-        if (films.length === 0) {
-            listContainer.innerHTML = "<p style='color:gray; padding:20px;'>Ничего не найдено</p>";
+        // Считаем количество элементов (с защитой от null/undefined)
+        const count = (films && Array.isArray(films)) ? films.length : 0;
+        counterDisplay.textContent = `Всего Архивов: ${count}`;
+
+        if (count === 0) {
+            listContainer.innerHTML = "<p style='color:gray; padding:20px; font-size:18px;text-align:center;'>Хранилище пусто <br> Вы можете загрузить сюда ваш Контент через Админ Панель<br>Подробнее в README.md</p>";
             return;
         }
 
@@ -42,7 +54,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             block.className = "film-card"; // Можешь стилизовать в CSS
 
             // Структурируем внутренности карточки
-           block.innerHTML = `
+            block.innerHTML = `
                 <img src="${film.logo}" alt="${film.name}">
                 <h3>${film.name}</h3>
                 <button class="watch">Смотреть</button>
@@ -120,62 +132,19 @@ document.addEventListener("DOMContentLoaded", async function () {
     applySearchStyles(mq.matches);
     document.body.insertBefore(searchInput, listContainer);
 
-    // 4. Категории (как у тебя)
-    const categories = {
-        "Мультфильмы": ["Cars"],
-        "Аниме": ["Invincible"],
-        "Хорроры": ["Super_Natural"],
-        "Фантастика": ["Invincible", "Super_Natural"],
-        "Психологические Триллеры": ["Mr_Robot"],
-        "Комедия": ["Home_Alone"],
-        "Фэнтези": ["Harry_Potter"],
-        "Драма": ["The_Rookie"]
-    };
-
-    const categorySelect = document.createElement("select");
-    function applyCategoryStyles(isMobile) {
-        const styles = isMobile ? {
-            position: "relative", top: "200px", width: "340px", height: "50px", left: "6%",
-            borderRadius: "6px", padding: "4px", fontSize: "15px", border: "none"
-        } : {
-            position: "relative", top: "7px", marginLeft: "40px", height: "32px",
-            borderRadius: "6px", padding: "4px", fontSize: "15px", border: "none", background: "#f5f5f5"
-        };
-        Object.assign(categorySelect.style, styles);
-    }
-    mq.addEventListener("change", (e) => applyCategoryStyles(e.matches));
-    applyCategoryStyles(mq.matches);
-
-    const optAll = document.createElement("option");
-    optAll.value = "all";
-    optAll.textContent = "Все категории";
-    categorySelect.appendChild(optAll);
-
-    for (let cat in categories) {
-        const opt = document.createElement("option");
-        opt.value = cat;
-        opt.textContent = cat;
-        categorySelect.appendChild(opt);
-    }
-    document.body.insertBefore(categorySelect, listContainer);
-
-    // 5. Логика фильтрации (работает прямо с массивом данных, перерисовывая разметку)
+    // 4. Логика фильтрации (только по поисковой строке)
     function applyFilters() {
         const query = searchInput.value.toLowerCase().trim();
-        const selectedCat = categorySelect.value;
 
         const filteredFilms = filmsList.filter(film => {
-            const inCategory = selectedCat === "all" || categories[selectedCat]?.includes(film.id);
-            const matchSearch = film.id.replace(/_/g, " ").toLowerCase().includes(query) || 
-                                film.name.toLowerCase().includes(query);
-            return inCategory && matchSearch;
+            return film.id.replace(/_/g, " ").toLowerCase().includes(query) || 
+                   film.name.toLowerCase().includes(query);
         });
 
         renderFilms(filteredFilms);
     }
 
     searchInput.addEventListener("input", applyFilters);
-    categorySelect.addEventListener("change", applyFilters);
 
     // Первый рендер всех фильмов при загрузке
     renderFilms(filmsList);

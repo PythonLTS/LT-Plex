@@ -19,7 +19,7 @@ import (
 )
 
 var base *bbolt.DB
-var jwtKey = []byte("LT-Security-Laboratory-SecretKey:awd9a0w120saplcaw/wqd")
+var jwtKey = []byte("xxx2")
 
 type QRSession struct {
 	Token      string
@@ -62,12 +62,25 @@ func allFilmsPage(w http.ResponseWriter, r *http.Request) {
 
 func scanFilms() []map[string]string {
 	root := "Films"
+
+	// Проверяем, существует ли папка. Если нет — создаем с правами 0755
+	if _, err := os.Stat(root); os.IsNotExist(err) {
+		err := os.MkdirAll(root, 0755)
+		if err != nil {
+			log.Println("Ошибка создания папки Films:", err)
+			return nil
+		}
+		log.Println("Папка Films отсутствовала и была успешно создана")
+	}
+
+	// Читаем содержимое директории
 	entries, err := ioutil.ReadDir(root)
 	if err != nil {
+		log.Println("Ошибка чтения папки Films:", err)
 		return nil
 	}
 
-	var list []map[string]string
+	list := make([]map[string]string, 0)
 
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -76,7 +89,7 @@ func scanFilms() []map[string]string {
 
 		folder := e.Name()
 		// Дефолтное изображение, если ничего не найдем
-		logo := "/s/unknown.png" 
+		logo := "/s/images/unknown.png" 
 
 		files, _ := ioutil.ReadDir(root + "/" + folder)
 		for _, f := range files {
@@ -87,8 +100,8 @@ func scanFilms() []map[string]string {
 		}
 
 		list = append(list, map[string]string{
-			"id":   folder,                         // ID для фронта (например, "Mr_Robot")
-			"name": strings.ReplaceAll(folder, "_", " "), // Красивое имя для вывода ("Mr Robot")
+			"id":   folder,                                   // ID для фронта (например, "Mr_Robot")
+			"name": strings.ReplaceAll(folder, "_", " "),     // Красивое имя для вывода ("Mr Robot")
 			"logo": logo,
 		})
 	}
@@ -235,7 +248,6 @@ func profileDataHandler(w http.ResponseWriter, r *http.Request) {
 	favs := favorites(claims.Username, "", "")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"username":  claims.Username,
-		"avatar":    "/s/images/default_avatar.png",
 		"favorites": favs,
 	})
 }
@@ -573,7 +585,6 @@ func main() {
 	http.HandleFunc("/addfv", addFavoriteHandler)
 	http.HandleFunc("/rmfv", removeFavoriteHandler)
 	http.HandleFunc("/films", filmsHandler)
-
 	http.Handle("/films/", http.StripPrefix("/films/", http.FileServer(http.Dir("Films"))))
 	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("static"))))
 
