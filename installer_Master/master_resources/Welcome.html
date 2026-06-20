@@ -16,6 +16,7 @@
             --text: #000000;
             --muted: #888888;
             --border: #e0e0e0;
+            --overlay: rgba(0, 0, 0, 0.4);
         }
 
         body.dark {
@@ -23,6 +24,7 @@
             --text: #ffffff;
             --muted: #777777;
             --border: #2a2a2a;
+            --overlay: rgba(0, 0, 0, 0.7);
         }
 
         body {
@@ -47,12 +49,20 @@
             font-size: 13px;
             cursor: pointer;
             font-family: inherit;
+            z-index: 10;
         }
 
         .wizard {
             width: 100%;
             max-width: 640px;
             padding: 40px;
+            position: relative;
+        }
+
+        /* Расширяем контейнер только для 6-го шага, чтобы влез сайдбар */
+        .wizard.wide {
+            max-width: 960px;
+            transition: max-width 0.3s ease;
         }
 
         .step {
@@ -255,7 +265,44 @@
             transform: translateX(18px);
         }
 
-        /* LT-Plex panel */
+        /* --- ИЗМЕНЕНИЯ ШАГА 6 --- */
+        .step6-header {
+            position: relative;
+        }
+
+        /* Место на устройстве в углу */
+        .storage-capacity-badge {
+            position: absolute;
+            top: 0;
+            right: 0;
+            font-size: 13px;
+            color: var(--muted);
+            font-weight: 500;
+        }
+
+        /* Контейнер для панели и боковой заметки */
+        .step6-container {
+            display: flex;
+            gap: 32px;
+            align-items: flex-start;
+        }
+
+        .step6-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* Сайдбар / Свободный текст справа */
+        .step6-sidebar {
+            width: 260px;
+            flex-shrink: 0;
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--muted);
+            border-left: 1px solid var(--border);
+            padding-left: 24px;
+        }
+
         .ltplex-actions {
             display: flex;
             gap: 12px;
@@ -380,7 +427,86 @@
             background: var(--border);
         }
 
-        /* Save status */
+        /* ОВЕРЛЕЙ И МОДАЛЬНОЕ ОКНО */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--overlay);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 100;
+        }
+
+        .overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 32px;
+            width: 100%;
+            max-width: 440px;
+            position: relative;
+        }
+
+        .modal h2 {
+            font-size: 20px;
+            font-weight: 400;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .form-group input[type="text"],
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .form-group input[type="file"] {
+            display: none;
+        }
+
+        .file-custom-btn {
+            display: block;
+            text-align: center;
+            padding: 12px;
+            border: 1px dashed var(--border);
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        .file-custom-btn:hover {
+            background: var(--border);
+        }
+
+        /* --- КОНЕЦ ИЗМЕНЕНИЙ ШАГА 6 --- */
+
         .save-status {
             font-size: 12px;
             color: var(--muted);
@@ -510,7 +636,7 @@
 <body>
     <button class="theme-btn" onclick="toggleTheme()" data-i18n="theme_btn">Тема</button>
 
-    <div class="wizard">
+    <div class="wizard" id="wizard-container">
         <div class="progress">
             <div class="progress-dot active"></div>
             <div class="progress-dot"></div>
@@ -567,8 +693,11 @@
                     <p data-i18n="step3_ok_desc">У вас установлена последняя версия приложения.</p>
                 </div>
                 <div class="buttons split">
-                    <button class="btn" onclick="showStep(2)" data-i18n="btn_recheck">Проверить снова</button>
-                    <button class="btn primary" onclick="next()" data-i18n="btn_continue">Продолжить</button>
+                    <button class="btn" onclick="showStep(1)" data-i18n="btn_back">Назад</button>
+                    <div style="display: flex; gap: 12px;">
+                        <button class="btn" onclick="showStep(2)" data-i18n="btn_recheck">Проверить снова</button>
+                        <button class="btn primary" onclick="next()" data-i18n="btn_continue">Продолжить</button>
+                    </div>
                 </div>
             </div>
 
@@ -584,8 +713,11 @@
                     <p data-i18n="step3_warn_desc">Доступна новая версия. Рекомендуем обновиться.</p>
                 </div>
                 <div class="buttons split">
-                    <button class="btn" onclick="next()" data-i18n="btn_ignore">Продолжить без</button>
-                    <button class="btn primary" onclick="doUpdate()" data-i18n="btn_update">Обновить</button>
+                    <button class="btn" onclick="showStep(1)" data-i18n="btn_back">Назад</button>
+                    <div style="display: flex; gap: 12px;">
+                        <button class="btn" onclick="next()" data-i18n="btn_ignore">Продолжить без</button>
+                        <button class="btn primary" onclick="doUpdate()" data-i18n="btn_update">Обновить</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -616,72 +748,84 @@
         </div>
 
         <div class="step">
-            <h1 data-i18n="step5_title">Настройка работы</h1>
-            <p data-i18n="step5_desc">Параметры запуска и поведения приложения.</p>
+            <h1>Настройка работы</h1>
+            <p>Параметры запуска и поведения приложения.</p>
             <div class="settings-list">
                 <div class="setting-row">
                     <div class="setting-info">
-                        <div class="setting-label" data-i18n="cfg_auto_label">Автозапуск</div>
-                        <div class="setting-desc" data-i18n="cfg_auto_desc">Рекомендуется для серверов</div>
+                        <div class="setting-label">Автозапуск</div>
+                        <div class="setting-desc">Рекомендуется для серверов</div>
                     </div>
                     <div class="toggle" onclick="toggleSwitch(this, 'autoStart')"></div>
                 </div>
             </div>
             <div class="buttons">
-                <button class="btn" onclick="prev()" data-i18n="btn_back">Назад</button>
-                <button class="btn primary" onclick="next()" data-i18n="btn_next">Далее</button>
+                <button class="btn" onclick="prev()">Назад</button>
+                <button class="btn primary" onclick="next()">Далее</button>
             </div>
         </div>
 
         <div class="step">
-            <h1 data-i18n="step6_title">Добро пожаловать в хранилище LT-Plex!</h1>
+            <div class="step6-header">
+                <h1 data-i18n="step6_title">Добро пожаловать в хранилище LT-Plex!</h1>
+                <div class="storage-capacity-badge" id="storage-badge">Место на устройстве: --</div>
+            </div>
             <p data-i18n="step6_desc">Загрузите существующий пакет или создайте новый.</p>
 
-            <div class="ltplex-actions">
-                <button onclick="handleAction('load')" data-i18n="btn_load_pack">Загрузить ltpack</button>
-                <button onclick="handleAction('create')" data-i18n="btn_create_pack">Создать ltpack</button>
-            </div>
+            <div class="step6-container">
+                <div class="step6-main">
+                    <div class="ltplex-actions">
+                        <button onclick="handleAction('load')" data-i18n="btn_load_pack">Загрузить ltpack</button>
+                        <button onclick="openCreateModal()" data-i18n="btn_create_pack">Создать ltpack</button>
+                    </div>
 
-            <div class="scan-panel">
-                <div class="scan-state show">
-                    <div class="spinner"></div>
-                    <div class="label" data-i18n="scan_processing">Сканирование хранилища...</div>
-                    <div class="progress-bar" style="margin-top:20px;">
-                        <div class="progress-bar-fill"></div>
+                    <div class="scan-panel">
+                        <div class="scan-state show">
+                            <div class="spinner"></div>
+                            <div class="label" data-i18n="scan_processing">Сканирование хранилища...</div>
+                            <div class="progress-bar" style="margin-top:20px;">
+                                <div class="progress-bar-fill"></div>
+                            </div>
+                        </div>
+
+                        <div class="empty-state">
+                            <div class="empty-icon">∅</div>
+                            <div class="empty-text" data-i18n="scan_empty">Хранилище пусто</div>
+                        </div>
+
+                        <div class="result-state">
+                            <div class="stats-grid">
+                                <div class="stat-block">
+                                    <div class="stat-number" id="stat-channels">0</div>
+                                    <div class="stat-label" data-i18n="stat_channels">каналов</div>
+                                </div>
+                                <div class="stat-block">
+                                    <div class="stat-number" id="stat-series">0</div>
+                                    <div class="stat-label" data-i18n="stat_series">сериалов</div>
+                                </div>
+                                <div class="stat-block">
+                                    <div class="stat-number" id="stat-videos">0</div>
+                                    <div class="stat-label" data-i18n="stat_videos">видео</div>
+                                </div>
+                                <div class="stat-block">
+                                    <div class="stat-number" id="stat-movies">0</div>
+                                    <div class="stat-label" data-i18n="stat_movies">фильмов</div>
+                                </div>
+                            </div>
+                            <button class="rescan-btn" onclick="startScan()" data-i18n="btn_rescan">Повторить сканирование</button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="empty-state">
-                    <div class="empty-icon">∅</div>
-                    <div class="empty-text" data-i18n="scan_empty">Хранилище пусто</div>
-                </div>
-
-                <div class="result-state">
-                    <div class="stats-grid">
-                        <div class="stat-block">
-                            <div class="stat-number" id="stat-channels">0</div>
-                            <div class="stat-label" data-i18n="stat_channels">каналов</div>
-                        </div>
-                        <div class="stat-block">
-                            <div class="stat-number" id="stat-series">0</div>
-                            <div class="stat-label" data-i18n="stat_series">сериалов</div>
-                        </div>
-                        <div class="stat-block">
-                            <div class="stat-number" id="stat-videos">0</div>
-                            <div class="stat-label" data-i18n="stat_videos">видео</div>
-                        </div>
-                        <div class="stat-block">
-                            <div class="stat-number" id="stat-movies">0</div>
-                            <div class="stat-label" data-i18n="stat_movies">фильмов</div>
-                        </div>
-                    </div>
-                    <button class="rescan-btn" onclick="startScan()" data-i18n="btn_rescan">Повторить сканирование</button>
+                <div class="step6-sidebar">
+                    <h3 style="font-size: 15px; font-weight:500; margin-bottom: 12px; color: var(--text);">Заметка</h3>
+                    <p style="font-size: 13px; margin-bottom: 0;">Сюда ты сможешь напялить любой свой текст, описание ограничений пакетов или подсказки по конфигурации хранилища LT-Plex.</p>
                 </div>
             </div>
 
             <div class="save-status" id="save-status"></div>
 
-            <div class="buttons">
+            <div class="buttons" style="margin-top: 32px;">
                 <button class="btn" onclick="prev()" data-i18n="btn_back">Назад</button>
                 <button class="btn primary" onclick="next()" data-i18n="btn_next">Далее</button>
             </div>
@@ -698,8 +842,7 @@
                 <div class="animated-title" id="final-title"></div>
                 
                 <p class="animated-text" data-i18n="step7_desc">
-                    Все настройки успешно сохранены. Приложение готово к работе. 
-                    Вы можете начать использовать все функции прямо сейчас.
+                    Все настройки успешно сохранены. Приложение готово к работе. Вы можете начать использовать все функции прямо сейчас.
                 </p>
             </div>
 
@@ -709,104 +852,79 @@
         </div>
     </div>
 
+    <div class="overlay" id="create-modal-overlay" onclick="closeCreateModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <h2 id="modal-title-i18n">Создать новый ltpack</h2>
+            
+            <div class="form-group">
+                <label id="modal-cover-i18n">Обложка пакета (необязательно)</label>
+                <label for="pack-cover" class="file-custom-btn" id="modal-file-btn-i18n">Выбрать изображение</label>
+                <input type="file" id="pack-cover" accept="image/*" onchange="handleCoverSelect(this)">
+            </div>
+
+            <div class="form-group">
+                <label id="modal-type-i18n">Тип контента</label>
+                <select id="pack-type">
+                    <option value="channel">Канал</option>
+                    <option value="video">Обычное видео</option>
+                    <option value="series">Сериал</option>
+                    <option value="movie">Фильм</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label id="modal-name-i18n">Название пакета</label>
+                <input type="text" id="pack-name" placeholder="Введите название...">
+            </div>
+
+            <div class="buttons" style="margin-top: 24px;">
+                <button class="btn" onclick="closeCreateModal()" id="modal-cancel-i18n">Отмена</button>
+                <button class="btn primary" onclick="submitCreatePack()" id="modal-submit-i18n">Создать</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // ============================================
-        // ЯЗЫКОВОЙ ПАКЕТ (ЛОКАЛИЗАЦИЯ)
-        // ============================================
         const translations = {
             ru: {
-                theme_btn: 'Тема',
-                btn_next: 'Далее',
-                btn_back: 'Назад',
-                btn_continue: 'Продолжить',
-                btn_recheck: 'Проверить снова',
-                btn_ignore: 'Продолжить без',
-                btn_update: 'Обновить',
-                btn_load_pack: 'Загрузить ltpack',
-                btn_create_pack: 'Создать ltpack',
-                btn_rescan: 'Повторить сканирование',
-                btn_start_work: 'Начать работу',
-                step0_title: 'Добро пожаловать',
-                step0_desc: 'Мастер установки поможет настроить приложение за пару шагов.',
-                step1_title: 'Выбор языка',
-                step1_desc: 'Выберите язык интерфейса. Изменить можно будет позже в настройках.',
-                step2_title: 'Проверка обновлений',
-                step2_desc: 'Ищем актуальную версию...',
-                step3_ok_title: 'Всё актуально',
-                step3_ok_desc: 'У вас установлена последняя версия приложения.',
-                step3_warn_title: 'Требуется обновление',
-                step3_warn_desc: 'Доступна новая версия. Рекомендуем обновиться.',
-                step4_title: 'Настройка сети',
-                step4_desc: 'Параметры сетевого взаимодействия.',
-                cfg_smartplex_label: 'Дополнение SmartPlex',
-                cfg_smartplex_desc: 'Расширенные возможности синхронизации',
-                cfg_dns_label: 'DNS',
-                cfg_dns_desc: 'Использовать альтернативный DNS-сервер',
-                step5_title: 'Настройка работы',
-                step5_desc: 'Параметры запуска и поведения приложения.',
-                cfg_auto_label: 'Автозапуск',
-                cfg_auto_desc: 'Рекомендуется для серверов',
-                step6_title: 'Добро пожаловать в хранилище LT-Plex!',
-                step6_desc: 'Загрузите существующий пакет или создайте новый.',
-                scan_processing: 'Сканирование хранилища...',
-                scan_empty: 'Хранилище пусто',
-                stat_channels: 'каналов',
-                stat_series: 'сериалов',
-                stat_videos: 'видео',
-                stat_movies: 'фильмов',
+                theme_btn: 'Тема', btn_next: 'Далее', btn_back: 'Назад', btn_continue: 'Продолжить',
+                btn_recheck: 'Проверить снова', btn_ignore: 'Продолжить без', btn_update: 'Обновить',
+                btn_load_pack: 'Загрузить ltpack', btn_create_pack: 'Создать ltpack', btn_rescan: 'Повторить сканирование',
+                btn_start_work: 'Начать работу', step0_title: 'Добро пожаловать',
+                step0_desc: 'Мастер установки поможет настроить приложение за пару шагов.', step1_title: 'Выбор языка',
+                step1_desc: 'Выберите язык интерфейса. Изменить можно будет позже в настройках.', step2_title: 'Проверка обновлений',
+                step2_desc: 'Ищем актуальную версию...', step3_ok_title: 'Всё актуально',
+                step3_ok_desc: 'У вас установлена последняя версия приложения.', step3_warn_title: 'Требуется обновление',
+                step3_warn_desc: 'Доступна новая версия. Рекомендуем обновиться.', step4_title: 'Настройка сети',
+                step4_desc: 'Параметры сетевого взаимодействия.', cfg_smartplex_label: 'Дополнение SmartPlex',
+                cfg_smartplex_desc: 'Расширенные возможности синхронизации', cfg_dns_label: 'DNS', cfg_dns_desc: 'Использовать альтернативный DNS-сервер',
+                step6_title: 'Добро пожаловать в хранилище LT-Plex!', step6_desc: 'Загрузите существующий пакет или создайте новый.',
+                scan_processing: 'Сканирование хранилища...', scan_empty: 'Хранилище пусто',
+                stat_channels: 'каналов', stat_series: 'сериалов', stat_videos: 'видео', stat_movies: 'фильмов',
                 step7_desc: 'Все настройки успешно сохранены. Приложение готово к работе. Вы можете начать использовать все функции прямо сейчас.',
-                final_title_text: 'Поздравляем!',
-                status_saving: 'Сохранение настроек...',
-                status_saved: 'Настройки сохранены',
-                status_saved_demo: 'Настройки сохранены (demo)',
-                alert_launched: 'Приложение запущено!'
+                final_title_text: 'Поздравляем!', status_saving: 'Сохранение настроек...',
+                status_saved: 'Настройки сохранены', status_saved_demo: 'Настройки сохранены (demo)', alert_launched: 'Приложение запущено!',
+                storage_text: 'Место на устройстве: '
             },
             en: {
-                theme_btn: 'Theme',
-                btn_next: 'Next',
-                btn_back: 'Back',
-                btn_continue: 'Continue',
-                btn_recheck: 'Check again',
-                btn_ignore: 'Continue without',
-                btn_update: 'Update',
-                btn_load_pack: 'Load ltpack',
-                btn_create_pack: 'Create ltpack',
-                btn_rescan: 'Rescan storage',
-                btn_start_work: 'Get Started',
-                step0_title: 'Welcome',
-                step0_desc: 'The setup wizard will help you configure the application in a few steps.',
-                step1_title: 'Language Selection',
-                step1_desc: 'Select the interface language. You can change this later in the settings.',
-                step2_title: 'Checking for Updates',
-                step2_desc: 'Looking for the latest version...',
-                step3_ok_title: 'All Up to Date',
-                step3_ok_desc: 'You have the latest version of the application installed.',
-                step3_warn_title: 'Update Required',
-                step3_warn_desc: 'A new version is available. We recommend updating.',
-                step4_title: 'Network Settings',
-                step4_desc: 'Network interaction parameters.',
-                cfg_smartplex_label: 'SmartPlex Addon',
-                cfg_smartplex_desc: 'Advanced synchronization features',
-                cfg_dns_label: 'DNS',
-                cfg_dns_desc: 'Use alternative DNS server',
-                step5_title: 'Operation Settings',
-                step5_desc: 'Application startup and behavior parameters.',
-                cfg_auto_label: 'Autostart',
-                cfg_auto_desc: 'Recommended for servers',
-                step6_title: 'Welcome to LT-Plex Storage!',
-                step6_desc: 'Load an existing package or create a new one.',
-                scan_processing: 'Scanning storage...',
-                scan_empty: 'Storage is empty',
-                stat_channels: 'channels',
-                stat_series: 'series',
-                stat_videos: 'videos',
-                stat_movies: 'movies',
+                theme_btn: 'Theme', btn_next: 'Next', btn_back: 'Back', btn_continue: 'Continue',
+                btn_recheck: 'Check again', btn_ignore: 'Continue without', btn_update: 'Update',
+                btn_load_pack: 'Load ltpack', btn_create_pack: 'Create ltpack', btn_rescan: 'Rescan storage',
+                btn_start_work: 'Get Started', step0_title: 'Welcome',
+                step0_desc: 'The setup wizard will help you configure the application in a few steps.', step1_title: 'Language Selection',
+                step1_desc: 'Select the interface language. You can change this later in the settings.', step2_title: 'Checking for Updates',
+                step2_desc: 'Looking for the latest version...', step3_ok_title: 'All Up to Date',
+                step3_ok_desc: 'You have the latest version of the application installed.', step3_warn_title: 'Update Required',
+                step3_warn_desc: 'A new version is available. We recommend updating.', step4_title: 'Network Settings',
+                step4_desc: 'Network interaction parameters.', cfg_smartplex_label: 'SmartPlex Addon',
+                cfg_smartplex_desc: 'Advanced synchronization features', cfg_dns_label: 'DNS', cfg_dns_desc: 'Use alternative DNS server',
+                step6_title: 'Welcome to LT-Plex Storage!', step6_desc: 'Load an existing package or create a new one.',
+                scan_processing: 'Scanning storage...', scan_empty: 'Storage is empty',
+                stat_channels: 'channels', stat_series: 'series', stat_videos: 'videos', stat_movies: 'movies',
                 step7_desc: 'All settings have been successfully saved. The application is ready to use. You can start using all features right now.',
-                final_title_text: 'Congratulations!',
-                status_saving: 'Saving settings...',
-                status_saved: 'Settings saved',
-                status_saved_demo: 'Settings saved (demo)',
-                alert_launched: 'Application launched!'
+                final_title_text: 'Congratulations!', status_saving: 'Saving settings...',
+                status_saved: 'Settings saved', status_saved_demo: 'Settings saved (demo)', alert_launched: 'Application launched!',
+                storage_text: 'Storage capacity: '
             }
         };
 
@@ -818,81 +936,78 @@
                     el.textContent = translations[lang][key];
                 }
             });
+            // Перевод модалки локально
+            if(lang === 'en') {
+                document.getElementById('modal-title-i18n').textContent = 'Create new ltpack';
+                document.getElementById('modal-cover-i18n').textContent = 'Package cover (optional)';
+                document.getElementById('modal-file-btn-i18n').textContent = 'Choose image';
+                document.getElementById('modal-type-i18n').textContent = 'Content type';
+                document.getElementById('modal-name-i18n').textContent = 'Package title';
+                document.getElementById('modal-cancel-i18n').textContent = 'Cancel';
+                document.getElementById('modal-submit-i18n').textContent = 'Create';
+            } else {
+                document.getElementById('modal-title-i18n').textContent = 'Создать новый ltpack';
+                document.getElementById('modal-cover-i18n').textContent = 'Обложка пакета (необязательно)';
+                document.getElementById('modal-file-btn-i18n').textContent = 'Выбрать изображение';
+                document.getElementById('modal-type-i18n').textContent = 'Тип контента';
+                document.getElementById('modal-name-i18n').textContent = 'Название пакета';
+                document.getElementById('modal-cancel-i18n').textContent = 'Отмена';
+                document.getElementById('modal-submit-i18n').textContent = 'Создать';
+            }
+            updateStorageBadgeDisplay();
         }
 
-        // ============================================
-        // ГЛОБАЛЬНОЕ СОСТОЯНИЕ
-        // ============================================
-        const settings = {
-            status: true,
-            language: 'ru',
-            theme: 'light',
-            smartPlex: false,
-            dns: false
-        };
-
+        const settings = { status: true, language: 'ru', theme: 'light', smartPlex: false, dns: false };
         let currentStep = 0;
         const totalSteps = 8;
         let settingsSent = false;
         let stepTimeout = null; 
+        let rawStorageString = "42 GB"; // Дефолт, если бэкенд выключен
 
         const dots = document.querySelectorAll('.progress-dot');
         const steps = document.querySelectorAll('.step');
+        const wizardContainer = document.getElementById('wizard-container');
 
         const USE_REAL_PROGRESS = false; 
 
-        // ============================================
-        // НАВИГАЦИЯ
-        // ============================================
         function showStep(n) {
-            if (stepTimeout) {
-                clearTimeout(stepTimeout);
-                stepTimeout = null;
-            }
+            if (stepTimeout) { clearTimeout(stepTimeout); stepTimeout = null; }
 
             steps.forEach(s => s.classList.remove('active'));
             dots.forEach(d => d.classList.remove('active'));
+
+            // Расширяем контейнер только на 6 шаге для сайдбара
+            if (n === 6) {
+                wizardContainer.classList.add('wide');
+            } else {
+                wizardContainer.classList.remove('wide');
+            }
 
             steps[n].classList.add('active');
             for (let i = 0; i <= n; i++) if(dots[i]) dots[i].classList.add('active');
 
             currentStep = n;
 
-            // Шаг 2: проверка обновлений
             if (n === 2) {
                 const fill = steps[2].querySelector('.progress-bar-fill');
                 resetProgressBar(fill);
-
                 if (!USE_REAL_PROGRESS) {
                     setTimeout(() => fill.classList.add('auto-run'), 10);
-                    stepTimeout = setTimeout(() => {
-                        applyUpdateState();
-                        next();
-                    }, 5000);
+                    stepTimeout = setTimeout(() => { applyUpdateState(); next(); }, 5000);
                 }
             }
 
-            // Шаг 6: отправка настроек + сканирование
             if (n === 6) {
-                if (!settingsSent) {
-                    sendSettings();
-                }
+                if (!settingsSent) { sendSettings(); }
+                fetchStorageCapacity();
                 startScan();
             }
 
-            // Шаг 7: анимация текста
-            if (n === 7) {
-                animateFinalText();
-            }
+            if (n === 7) { animateFinalText(); }
         }
 
-        function next() {
-            if (currentStep < totalSteps - 1) showStep(currentStep + 1);
-        }
-
-        function prev() {
-            if (currentStep > 0) showStep(currentStep - 1);
-        }
+        function next() { if (currentStep < totalSteps - 1) showStep(currentStep + 1); }
+        function prev() { if (currentStep > 0) showStep(currentStep - 1); }
 
         function resetProgressBar(el) {
             if (!el) return;
@@ -901,23 +1016,74 @@
             void el.offsetWidth; 
         }
 
-        // ============================================
-        // ЯЗЫК
-        // ============================================
         function selectLang(btn, lang) {
             btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             settings.language = lang;
-            
-            // Динамически переводим интерфейс при клике
             updateInterfaceLanguage();
         }
 
-        // ============================================
-        // LT-PLEX СКАНИРОВАНИЕ
-        // ============================================
+        // --- ЛОГИКА ДЛЯ ПОЛУЧЕНИЯ МЕСТА С БЭКЕНДА ---
+        async function fetchStorageCapacity() {
+            try {
+                const response = await fetch('/StorageCapacity');
+                if (response.ok) {
+                    rawStorageString = await response.text(); // Бэкенд должен вернуть, к примеру, "250 GB" или "500 MB"
+                }
+            } catch (e) {
+                // Если эндпоинт отсутствует, молча используем дефолтные "42 GB"
+            }
+            updateStorageBadgeDisplay();
+        }
+
+        function updateStorageBadgeDisplay() {
+            const badge = document.getElementById('storage-badge');
+            if(badge) {
+                const prefix = translations[settings.language].storage_text;
+                badge.textContent = `${prefix}${rawStorageString}`;
+            }
+        }
+
+        // --- ЛОГИКА ОВЕРЛЕЯ (СОЗДАНИЕ PACK) ---
+        function openCreateModal() {
+            document.getElementById('create-modal-overlay').classList.add('show');
+        }
+
+        function closeCreateModal(e) {
+            document.getElementById('create-modal-overlay').classList.remove('show');
+            // Сброс полей
+            document.getElementById('pack-name').value = '';
+            document.getElementById('pack-type').value = 'channel';
+            document.getElementById('modal-file-btn-i18n').textContent = translations[settings.language].lang === 'en' ? 'Choose image' : 'Выбрать изображение';
+        }
+
+        function handleCoverSelect(input) {
+            const label = document.getElementById('modal-file-btn-i18n');
+            if(input.files && input.files[0]) {
+                label.textContent = input.files[0].name;
+            }
+        }
+
+        function submitCreatePack() {
+            const name = document.getElementById('pack-name').value;
+            const type = document.getElementById('pack-type').value;
+            const fileInput = document.getElementById('pack-cover').files[0];
+
+            if(!name.trim()) {
+                alert(settings.language === 'en' ? 'Please enter a package title' : 'Пожалуйста, введите название пакета');
+                return;
+            }
+
+            // Твоя будущая логика отправки данных на бэкенд (FormData / JSON)
+            console.log('Создание пакета:', { name, type, file: fileInput ? fileInput.name : 'none' });
+            
+            closeCreateModal();
+            startScan(); // Перезапускаем сканирование, чтобы сымитировать появление пакета
+        }
+
+        // --- СКАНИРОВАНИЕ ---
         let storageData = null;
-        let hasStorageContent = false;
+        let hasStorageContent = true;
 
         function startScan() {
             const panel = steps[6].querySelector('.scan-panel');
@@ -934,15 +1100,14 @@
 
             if (!USE_REAL_PROGRESS) {
                 setTimeout(() => fill.classList.add('auto-run'), 10);
-                
                 stepTimeout = setTimeout(() => {
                     scanState.classList.remove('show');
                     if (hasStorageContent) {
                         storageData = {
-                            channels: Math.floor(Math.random() * 50) + 10,
-                            series: Math.floor(Math.random() * 200) + 20,
-                            videos: Math.floor(Math.random() * 500) + 50,
-                            movies: Math.floor(Math.random() * 300) + 30
+                            channels: Math.floor(Math.random() * 5) + 1,
+                            series: Math.floor(Math.random() * 12) + 2,
+                            videos: Math.floor(Math.random() * 80) + 10,
+                            movies: Math.floor(Math.random() * 20) + 2
                         };
                         renderStats(storageData);
                         resultState.classList.add('show');
@@ -954,9 +1119,6 @@
             }
         }
 
-        // ============================================
-        // ОСТАЛЬНАЯ ЛОГИКА
-        // ============================================
         async function sendSettings() {
             const statusEl = document.getElementById('save-status');
             statusEl.textContent = translations[settings.language].status_saving;
@@ -968,13 +1130,10 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(settings)
                 });
-
                 if (response.ok) {
                     settingsSent = true;
                     statusEl.textContent = translations[settings.language].status_saved;
                     statusEl.className = 'save-status success';
-                } else {
-                    throw new Error(`HTTP ${response.status}`);
                 }
             } catch (error) {
                 settingsSent = true;
@@ -988,7 +1147,7 @@
             settings.theme = document.body.classList.contains('dark') ? 'dark' : 'light';
         }
 
-        let updateRequired = true;
+        let updateRequired = false;
         function applyUpdateState() {
             const step3 = steps[3];
             if (updateRequired) {
@@ -1030,11 +1189,8 @@
             });
         }
 
-        function launchApp() { 
-            alert(translations[settings.language].alert_launched); 
-        }
+        function launchApp() { alert(translations[settings.language].alert_launched); }
 
-        // Инициализация языка при старте
         updateInterfaceLanguage();
     </script>
 </body>
