@@ -1,0 +1,148 @@
+* {
+	box-sizing: border-box;
+	padding: 0;
+	margin: 0;
+}
+html {width:100% ;height:100%;}
+body {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	justify-content: center;
+	background-color: rgb(20, 20, 19);
+}
+@font-face {
+	font-family: 'Master';
+	src:url('/resources/NotoSans-Regular.ttf');
+}
+.container-main {
+	display: block;
+	position: relative;
+	margin-top: 230px;
+	border: solid rgb(60,60,60) 2px;
+	border-radius: 10px;
+	width: 60%;
+	height: 500px;
+}
+.title-window {
+	display: block;
+	position: relative;
+	top:40px;
+	left:70px;
+	color:black;
+	font-family: 'Master';
+	font-size: 40px;
+	animation: welcomeH1 700ms forwards;
+}
+.subtitle-window {
+	display: block;
+
+	position: relative;
+	width: 700px;
+	top:60px;
+	left:70px;
+	opacity: 0;
+	font-family: 'Master';
+	font-size: 20px;
+	animation: welcomeH2 400ms forwards 1s;
+	
+}
+@keyframes welcomeH1 {
+	0% {
+		transform: translateY(-30px) translateX(-20px);
+	}
+	100% {
+		color: white;
+	}
+
+}
+@keyframes welcomeH2 {
+	0% {
+		opacity: 0;
+	}
+	100% {
+		color: rgb(130, 130, 130);
+		opacity: 1;
+	}
+}
+
+
+.container-next-prev {
+	display: flex;
+	position: absolute;
+	align-items: center;
+	flex-direction: row-reverse;
+	gap: 5px;
+	bottom: 40px;
+	right: 80px;
+	border: none;
+	width: auto;
+	height: auto;
+
+}
+
+.buttons-next-prev {
+	cursor: pointer;
+	color: rgb(255,255,255);
+	background-color: rgb(0,0,0);
+	outline: none;
+	border: solid 2px rgba(255,255,255,0.3);
+	width: 150px;
+	height: 45px;
+	text-align: center;
+	opacity: 0;
+	animation: buttons-nextprev-Animation 300ms forwards 2s;
+}
+
+@keyframes buttons-nextprev-Animation {
+	0%{
+		transform: translateY(10px);
+
+		opacity: 0;
+	}
+	100%{
+		opacity: 1;
+	}
+}
+
+.container-languageSelect {
+	display: block;
+	position: relative;
+	margin-top: 230px;
+	border: solid rgb(60,60,60) 2px;
+	border-radius: 10px;
+	width: 40%;
+	height: 500px;
+}
+.langs-mini-container {
+	position: relative;
+	top: 200px;
+	left: 100px;
+	border: none;
+	width: 45%;
+	height: 10%;
+	opacity: 0;
+	animation: lang-buttons-animation 300ms forwards 1s;
+}
+.langs-mini-container #rus,.langs-mini-container #en {
+	width: 140px;
+	height: 60px;
+	color: white;
+	border: solid transparent 1px;
+	border-radius: 5px;
+	background-color: rgb(36, 36, 36);
+	transition: border 200ms ;
+	cursor: pointer;
+}
+.langs-mini-container #rus:hover,.langs-mini-container #en:hover {
+	border: solid white 1px;
+}
+@keyframes lang-buttons-animation {
+	0%{
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	100%{
+		opacity: 1;
+	}
+}
