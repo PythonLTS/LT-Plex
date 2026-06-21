@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Мастер установки</title>
-    
+    <script src="/resources/jszip.min.js"></script>
     <style>
         /* ==========================================================================
            1. СБРОС СТИЛЕЙ И ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (ЦВЕТА)
@@ -918,7 +918,7 @@
                         <div class="setting-label">Автозапуск</div>
                         <div class="setting-desc">Рекомендуется для серверов</div>
                     </div>
-                    <div class="toggle" onclick="toggleSwitch(this, 'autoStart')"></div>
+                    <div class="toggle" onclick="toggleSwitch(this, 'autostart')"></div>
                 </div>
             </div>
             <div class="buttons">
@@ -939,8 +939,12 @@
                 <!-- Основной контент (кнопки и панель сканирования) -->
                 <div class="step6-main">
                     <div class="ltplex-actions">
-                        <button onclick="handleAction('load')" data-i18n="btn_load_pack">Загрузить LTpack</button>
-                        <button onclick="openCreateModal()" data-i18n="btn_create_pack">Создать LTpack</button>
+                        <button class="action-btn" data-i18n="btn_load_pack" onclick="triggerPackUpload()">Загрузить LTpack</button>
+    
+                        <input type="file" id="main-pack-upload-input" accept=".ltpack" style="display: none;" onchange="handlePackUpload(this)">
+
+                        <button class="action-btn" data-i18n="btn_create_pack" onclick="openCreateModal()">Создать ltpack</button>
+                        <button class="action-btn" data-i18n="btn_rescan" onclick="startScan()">Повторить сканирование</button>
                     </div>
 
                     <div class="scan-panel">
@@ -1177,7 +1181,7 @@
         };
 
         // Текущее состояние конфигурации
-        const settings = { status: true, language: 'ru', theme: 'light', smartPlex: false, dns: false };
+        const settings = { status: true, language: 'ru', theme: 'light', smartPlex: false, dns: false ,autostart: false};
         let currentStep = 0;
         const totalSteps = 8;
         let settingsSent = false;
@@ -1192,8 +1196,22 @@
         const USE_REAL_PROGRESS = false; 
 
         // Состояние конструктора структур
+        // ==========================================================================
+        // ОБНОВЛЕННОЕ СОСТОЯНИЕ И СТРУКТУРА ДАННЫХ КОНСТРУКТОРА
+        // ==========================================================================
         let currentStructureType = 'channel';
-        let seriesSeasons = []; 
+        
+        // Данные для сборки пакета
+        let packData = {
+            name: '',
+            type: 'channel',
+            coverFile: null,      // Хранит объект File обложки
+            channelVideos: [],    // Для каналов: [{ title: '...', videoFile: File }]
+            seriesSeasons: [],    // Для сериалов: [{ id: '...', name: 'Сезон 1', episodes: [{ id: '...', name: 'Имя файла', file: File }] }]
+            singleVideoFile: null // Для обычного видео и фильмов: объект File
+        };
+
+        // Вспомогательный ID текущего выбранного сезона
         let activeSeasonId = null;
 
         /**
@@ -1201,6 +1219,14 @@
          */
         function handleTypeChange(type) {
             currentStructureType = type;
+            packData.type = type;
+            
+            // Сброс данных при переключении типа
+            packData.channelVideos = [];
+            packData.seriesSeasons = [];
+            packData.singleVideoFile = null;
+            activeSeasonId = null;
+
             const container = document.getElementById('modal-adaptive-container');
             const titleTop = document.getElementById('dynamic-modal-title');
             const nameLabel = document.getElementById('main-name-label');
@@ -1209,12 +1235,12 @@
             const coverBox = document.querySelector('.modal-cover-box');
             const transferZone = document.getElementById('cover-transfer-zone');
 
-            // Сброс активных элементов списков
+            // Очистка DOM-списков
             document.getElementById('modal-dynamic-list').innerHTML = '';
             document.getElementById('sidebar-big-btn').style.display = 'flex';
             document.getElementById('sidebar-active-content').classList.remove('show');
-
-            // Прячем все подформы
+            
+            // Прячем подформы
             document.getElementById('subform-channel').classList.remove('visible');
             document.getElementById('subform-series').classList.remove('visible');
             document.getElementById('subform-single-file').classList.remove('visible');
@@ -1251,8 +1277,6 @@
                 nameLabel.textContent = 'Название Сериала';
                 nameInput.placeholder = 'Введите название...';
                 bigBtnText.textContent = 'Сезон';
-                seriesSeasons = [];
-                activeSeasonId = null;
             } else {
                 titleTop.textContent = 'Структура Канал';
                 nameLabel.textContent = 'Название Канала';
@@ -1288,6 +1312,8 @@
         }
 
         /* --- ЛОГИКА СТРУКТУРЫ: КАНАЛ --- */
+        let currentTempVideoFile = null;
+
         function syncChannelPreview(val) {
             let temp = document.getElementById('channel-temp-item');
             const list = document.getElementById('modal-dynamic-list');
@@ -1301,26 +1327,97 @@
             }
             temp.querySelector('span').textContent = val;
         }
+        async function handlePackUpload(input) {
+            if (!input.files || input.files[0].length === 0) return;
+            
+            const file = input.files[0];
+            const formData = new FormData();
+            
+            // Кладём файл в FormData под ключом 'packFile'
+            formData.append('packFile', file);
+            
+            // Визуально запускаем анимацию сканирования, как будто система обрабатывает файл
+            const panel = steps[6].querySelector('.scan-panel');
+            const scanState = panel.querySelector('.scan-state');
+            const emptyState = panel.querySelector('.empty-state');
+            const resultState = panel.querySelector('.result-state');
+            const fill = scanState.querySelector('.progress-bar-fill');
 
+            scanState.classList.add('show');
+            emptyState.classList.remove('show');
+            resultState.classList.remove('show');
+            resetProgressBar(fill);
+            setTimeout(() => fill.classList.add('auto-run'), 10);
+
+            try {
+                // Отправляем файл на твой готовый эндпоинт
+                const response = await fetch('/UploadPack', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    // Если сервер принял файл, перезапускаем сканирование, чтобы обновить списки пакетов
+                    startScan(); 
+                } else {
+                    throw new Error('Код ошибки сервера: ' + response.status);
+                }
+            } catch (error) {
+                console.error("Ошибка при отправке пакета:", error);
+                alert(settings.language === 'en' ? 'Failed to upload .ltpack!' : 'Не удалось загрузить .ltpack на сервер!');
+                
+                // В случае ошибки возвращаем интерфейс в обычное состояние
+                scanState.classList.remove('show');
+                emptyState.classList.add('show');
+            } finally {
+                // Сбрасываем инпут, чтобы можно было загрузить тот же файл повторно
+                input.value = '';
+            }
+        }
         function handleChannelFile(input) {
             if(input.files && input.files[0]) {
-                document.getElementById('channel-upload-text').textContent = input.files[0].name;
+                const file = input.files[0];
+                document.getElementById('channel-upload-text').textContent = file.name;
+                
+                const titleInput = document.getElementById('video-title-input').value.trim();
+                const videoTitle = titleInput || file.name;
+                
+                // Фиксируем в массив данных
+                packData.channelVideos.push({
+                    title: videoTitle,
+                    videoFile: file
+                });
+
                 const temp = document.getElementById('channel-temp-item');
-                if(temp) temp.removeAttribute('id');
+                if(temp) {
+                    temp.querySelector('span').textContent = videoTitle;
+                    temp.removeAttribute('id'); // Закрепляем в списке интерфейса
+                } else {
+                    const list = document.getElementById('modal-dynamic-list');
+                    const item = document.createElement('div');
+                    item.className = 'list-item';
+                    item.innerHTML = `<span>${videoTitle}</span><button class="remove-btn" onclick="removeChannelItem(this)">×</button>`;
+                    list.appendChild(item);
+                }
+
                 setTimeout(resetRightFormInputs, 400);
             }
         }
 
         function removeChannelItem(btn) {
-            btn.parentElement.remove();
+            const item = btn.parentElement;
+            const title = item.querySelector('span').textContent;
+            packData.channelVideos = packData.channelVideos.filter(v => v.title !== title);
+            item.remove();
             checkSidebarEmptyState();
         }
 
-        /* --- ЛОГИКА СТРУКТУРЫ: СЕРИАЛ --- */
+
+        /* --- ИСПРАВЛЕННАЯ ЛОГИКА СТРУКТУРЫ: СЕРИАЛ (МНОЖЕСТВО СЕРИЙ В СЕЗОНЕ) --- */
         function createPackSeason() {
             const list = document.getElementById('modal-dynamic-list');
             const seasonNumber = list.children.length + 1;
-            const seasonId = 'season_' + Date.now();
+            const seasonId = 'season_' + Date.now() + Math.random().toString(36).substr(2, 5);
             
             const item = document.createElement('div');
             item.className = 'list-item selected';
@@ -1331,7 +1428,13 @@
             item.onclick = () => selectSeason(seasonId);
             list.appendChild(item);
 
-            seriesSeasons.push({ id: seasonId, name: `Сезон ${seasonNumber}`, files: [] });
+            // Создаем структуру сезона с пустым массивом эпизодов
+            packData.seriesSeasons.push({ 
+                id: seasonId, 
+                name: `Season${seasonNumber}`, // Формат для папок согласно ТЗ
+                episodes: [] 
+            });
+            
             selectSeason(seasonId);
         }
 
@@ -1343,65 +1446,120 @@
                 else el.classList.remove('selected');
             });
 
-            const seasonObj = seriesSeasons.find(s => s.id === id);
+            const seasonObj = packData.seriesSeasons.find(s => s.id === id);
             if(seasonObj) {
-                document.getElementById('series-selected-title').textContent = `Выбран ${seasonObj.name.replace('Сезон ', '')}`;
+                const displayNum = seasonObj.name.replace('Season', '');
+                document.getElementById('series-selected-title').textContent = `Выбран сезон ${displayNum}`;
                 renderSeasonFiles(seasonObj);
             }
         }
-
+        function triggerPackUpload() {
+            document.getElementById('main-pack-upload-input').click();
+        }
+        // Отрендерить список добавленных серий в правой зоне
         function renderSeasonFiles(seasonObj) {
-            const mainText = document.getElementById('series-upload-text');
-            const subText = document.getElementById('series-upload-subtext');
             const zone = document.getElementById('series-upload-zone');
+            
+            // Очищаем старые кастомные элементы серий, оставляя только скрытый input
+            const input = document.getElementById('series-file-input');
+            zone.innerHTML = '';
+            zone.appendChild(input);
 
-            if(seasonObj.files.length > 0) {
-                mainText.textContent = seasonObj.files[0];
-                mainText.className = "clickable-file-preview";
-                subText.textContent = "и сделать кликабельной чтоб удалить";
+            if(seasonObj.episodes.length > 0) {
+                // Если серии есть, рендерим их списком прямо внутри зоны загрузки
+                seasonObj.episodes.forEach(ep => {
+                    const epWrapper = document.createElement('div');
+                    epWrapper.style.display = 'flex';
+                    epWrapper.style.alignItems = 'center';
+                    epWrapper.style.gap = '10px';
+                    epWrapper.style.margin = '4px 0';
+                    
+                    const span = document.createElement('span');
+                    span.className = "clickable-file-preview";
+                    span.textContent = ep.name;
+                    // Удаление конкретной серии по клику на её название (как в ТЗ)
+                    span.onclick = (e) => {
+                        e.stopPropagation();
+                        removeEpisode(seasonObj.id, ep.id);
+                    };
+
+                    epWrapper.appendChild(span);
+                    zone.appendChild(epWrapper);
+                });
+
+                // Добавляем маленькую кнопку в самый низ зоны для загрузки последующих серий
+                const addMoreLabel = document.createElement('span');
+                addMoreLabel.textContent = "+ Добавить еще серию";
+                addMoreLabel.style.fontSize = "13px";
+                addMoreLabel.style.marginTop = "8px";
+                addMoreLabel.style.textDecoration = "underline";
+                zone.appendChild(addMoreLabel);
                 zone.style.borderColor = "var(--text)";
             } else {
+                // Исходное пустое состояние зоны
+                const mainText = document.createElement('span');
+                mainText.id = "series-upload-text";
                 mainText.textContent = "Добавить Серию";
-                mainText.className = "";
+
+                const subText = document.createElement('span');
+                subText.className = "sub-label";
+                subText.id = "series-upload-subtext";
                 subText.textContent = "Или если уже загружена то название файла";
+
+                zone.appendChild(mainText);
+                zone.appendChild(subText);
+                zone.style.borderColor = "var(--text)";
             }
         }
 
         function triggerSeriesUpload() {
-            const seasonObj = seriesSeasons.find(s => s.id === activeSeasonId);
-            if(seasonObj && seasonObj.files.length > 0) {
-                seasonObj.files = [];
-                renderSeasonFiles(seasonObj);
-            } else {
-                document.getElementById('series-file-input').click();
-            }
+            document.getElementById('series-file-input').click();
         }
 
         function handleSeriesFile(input) {
             if(input.files && input.files[0] && activeSeasonId) {
-                const seasonObj = seriesSeasons.find(s => s.id === activeSeasonId);
+                const seasonObj = packData.seriesSeasons.find(s => s.id === activeSeasonId);
                 if(seasonObj) {
-                    seasonObj.files.push(input.files[0].name);
+                    const file = input.files[0];
+                    const epId = 'ep_' + Date.now() + Math.random().toString(36).substr(2, 5);
+                    
+                    // Добавляем серию в массив эпизодов выбранного сезона
+                    seasonObj.episodes.push({
+                        id: epId,
+                        name: file.name,
+                        file: file
+                    });
+                    
                     renderSeasonFiles(seasonObj);
                 }
+                input.value = ''; // Сброс инпута для повторного выбора того же файла
+            }
+        }
+
+        function removeEpisode(seasonId, epId) {
+            const seasonObj = packData.seriesSeasons.find(s => s.id === seasonId);
+            if(seasonObj) {
+                seasonObj.episodes = seasonObj.episodes.filter(ep => ep.id !== epId);
+                renderSeasonFiles(seasonObj);
             }
         }
 
         function removeSeriesSeason(event, btn) {
             event.stopPropagation();
             const item = btn.parentElement;
-            seriesSeasons = seriesSeasons.filter(s => s.id !== item.dataset.id);
+            packData.seriesSeasons = packData.seriesSeasons.filter(s => s.id !== item.dataset.id);
             item.remove();
-            if(seriesSeasons.length > 0) {
-                selectSeason(seriesSeasons[seriesSeasons.length - 1].id);
+            if(packData.seriesSeasons.length > 0) {
+                selectSeason(packData.seriesSeasons[packData.seriesSeasons.length - 1].id);
             } else {
                 checkSidebarEmptyState();
             }
         }
 
-        /* --- ЛОГИКА СТРУКТУРЫ: ОДИН ФАЙЛ (ВИДЕО / ФИЛЬМ) --- */
+        /* --- ОДИНОЧНЫЙ ФАЙЛ (ВИДЕО / ФИЛЬМ) --- */
         function handleSingleFileSelect(input) {
             if(input.files && input.files[0]) {
+                packData.singleVideoFile = input.files[0];
                 document.getElementById('single-file-upload-text').textContent = input.files[0].name;
             }
         }
@@ -1419,11 +1577,142 @@
         function handleCoverSelect(input) {
             const labels = document.querySelectorAll('.cover-text-node');
             if(input.files && input.files[0]) {
+                packData.coverFile = input.files[0];
                 labels.forEach(el => el.textContent = input.files[0].name);
             }
         }
 
-        /* --- ОБЩИЕ СИСТЕМНЫЕ ФУНКЦИИ МАСТЕРА --- */
+
+       
+        // ==========================================================================
+        // СБОРКА И СКАЧИВАНИЕ ПАКЕТА .LTPACK НА СТОРОНЕ КЛИЕНТА
+        // ==========================================================================
+        async function submitCreatePack() {
+            const nameField = document.getElementById('pack-name');
+            packData.name = nameField.value.trim();
+
+            if(!packData.name) {
+                alert(settings.language === 'en' ? 'Please enter a title' : 'Пожалуйста, введите название');
+                nameField.focus();
+                return;
+            }
+
+            // Валидация наличия контента перед сборкой
+            if (packData.type === 'channel' && packData.channelVideos.length === 0) {
+                alert(settings.language === 'en' ? 'Add at least one video' : 'Добавьте хотя бы одно видео для канала');
+                return;
+            }
+            if (packData.type === 'series' && packData.seriesSeasons.length === 0) {
+                alert(settings.language === 'en' ? 'Add at least one season' : 'Создайте хотя бы один сезон');
+                return;
+            }
+            if ((packData.type === 'video' || packData.type === 'film') && !packData.singleVideoFile) {
+                alert(settings.language === 'en' ? 'Please upload a video file' : 'Пожалуйста, загрузите файл видео');
+                return;
+            }
+
+            // Проверяем, загрузилась ли библиотека JSZip
+            if (typeof JSZip === 'undefined') {
+                alert(settings.language === 'en' ? 'ZIP library not loaded yet!' : 'Библиотека архивации еще не загрузилась!');
+                return;
+            }
+
+            // Инициализируем архив
+            const zip = new JSZip();
+            
+            // Создаем корневую папку с названием проекта
+            const rootFolder = zip.folder(packData.name);
+
+            // 1. Добавляем обложку в корень (название.jpeg)
+            if (packData.coverFile) {
+                rootFolder.file(`${packData.name}.jpeg`, packData.coverFile);
+            }
+
+            // Объект метаданных для файла metadata.json
+            let metadata = {
+                packName: packData.name,
+                packType: packData.type,
+                language: settings.language || 'ru',
+                dateLoaded: new Date().toISOString(),
+                stats: {
+                    seasonsCount: 0,
+                    videosCount: 0
+                }
+            };
+
+            // 2. Сборка структуры папок по ТЗ
+            if (packData.type === 'channel') {
+                const videosFolder = rootFolder.folder("Videos");
+                packData.channelVideos.forEach(vid => {
+                    // Сохраняем видео с его полным оригинальным названием в папку Videos
+                    videosFolder.file(vid.videoFile.name, vid.videoFile);
+                });
+                metadata.stats.videosCount = packData.channelVideos.length;
+
+            } else if (packData.type === 'series') {
+                const seasonsFolder = rootFolder.folder("Seasons");
+                metadata.stats.seasonsCount = packData.seriesSeasons.length;
+                
+                let totalEpisodes = 0;
+                packData.seriesSeasons.forEach(season => {
+                    const currentSeasonFolder = seasonsFolder.folder(season.name); // Season1, Season2...
+                    season.episodes.forEach(ep => {
+                        // Кладём файл видео прямо в папку сезона
+                        currentSeasonFolder.file(ep.file.name, ep.file);
+                        totalEpisodes++;
+                    });
+                });
+                metadata.stats.videosCount = totalEpisodes;
+
+            } else if (packData.type === 'film') {
+                const filmFolder = rootFolder.folder("Film");
+                // Кладём фильм внутрь выделенной папки Film
+                filmFolder.file(packData.singleVideoFile.name, packData.singleVideoFile);
+                metadata.stats.videosCount = 1;
+
+            } else if (packData.type === 'video') {
+                // Для обычного видео файл ложится в корень папки рядом с html-плеером
+                rootFolder.file(packData.singleVideoFile.name, packData.singleVideoFile);
+                metadata.stats.videosCount = 1;
+            }
+
+            // 3. Записываем файл метаданных metadata.json в архив (кроме типа 'video', если по ТЗ им не нужны меты)
+            if (packData.type !== 'video') {
+                rootFolder.file("metadata.json", JSON.stringify(metadata, null, 4));
+            }
+
+            // Меняем статус в UI на "Архивация..."
+            const statusEl = document.getElementById('save-status');
+            if(statusEl) {
+                statusEl.textContent = settings.language === 'en' ? 'Generating .ltpack...' : 'Генерация .ltpack...';
+                statusEl.className = 'save-status';
+            }
+
+            try {
+                // Генерируем архив в виде бинарного Blob объекта
+                const content = await zip.generateAsync({ type: "blob" });
+                
+                // Создаем невидимую ссылку для скачивания файла браузером
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(content);
+                link.download = `${packData.name}.ltpack`; // Маскируем zip под расширение .ltpack
+                
+                document.body.appendChild(link);
+                link.click(); // Симулируем клик для скачивания
+                document.body.removeChild(link);
+
+                // Закрываем окно конструктора и обновляем шаги
+                closeCreateModal();
+                startScan(); 
+
+            } catch (error) {
+                console.error("Packing error:", error);
+                alert(settings.language === 'en' ? 'Failed to generate pack!' : 'Ошибка при сборке пакета!');
+            }
+        }
+
+
+        /* --- ОСТАЛЬНЫЕ СИСТЕМНЫЕ ФУНКЦИИ МАСТЕРА ПЛЮШЕК --- */
         function updateInterfaceLanguage() {
             const lang = settings.language;
             document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -1440,13 +1729,25 @@
             steps.forEach(s => s.classList.remove('active'));
             dots.forEach(d => d.classList.remove('active'));
 
+            // Если зашли на Шаг 6 (Конструктор пакетов) — делаем окно шире
             if (n === 6) { wizardContainer.classList.add('wide'); } 
             else { wizardContainer.classList.remove('wide'); }
+
+            // НАВИГАЦИЯ: Управляем видимостью кнопки "Назад" после 5-го шага
+            const btnBack = document.querySelector('.wizard-navigation .nav-btn:first-child') || document.getElementById('btn-back');
+            if (btnBack) {
+                if (n >= 6) {
+                    btnBack.style.visibility = 'hidden'; // Скрываем кнопку "Назад" (сохраняя геометрию) или используй display = 'none'
+                } else {
+                    btnBack.style.visibility = 'visible';
+                }
+            }
 
             steps[n].classList.add('active');
             for (let i = 0; i <= n; i++) { if(dots[i]) dots[i].classList.add('active'); }
             currentStep = n;
 
+            // Шаг 2: Проверка обновлений (Анимация прогресс-бара)
             if (n === 2) {
                 const fill = steps[2].querySelector('.progress-bar-fill');
                 resetProgressBar(fill);
@@ -1455,16 +1756,34 @@
                     stepTimeout = setTimeout(() => { applyUpdateState(); next(); }, 2000);
                 }
             }
+
+            // Шаг 5: Выбор автозапуска
+            if (n === 5) {
+                // Оставляем управление пользователю
+            }
+
+            // Шаг 6: Хранилище пакетов LT-Plex
             if (n === 6) {
                 if (!settingsSent) { sendSettings(); }
                 fetchStorageCapacity();
                 startScan();
             }
+
+            // Шаг 7: Финал (Поздравляем)
             if (n === 7) { animateFinalText(); }
         }
 
-        function next() { if (currentStep < totalSteps - 1) showStep(currentStep + 1); }
-        function prev() { if (currentStep > 0) showStep(currentStep - 1); }
+        function next() { 
+            if (currentStep < totalSteps - 1) {
+                showStep(currentStep + 1); 
+            }
+        }
+        
+        function prev() { 
+            if (currentStep > 0) {
+                showStep(currentStep - 1); 
+            }
+        }
 
         function resetProgressBar(el) {
             if (!el) return;
@@ -1505,17 +1824,10 @@
             document.getElementById('pack-name').value = '';
             document.getElementById('pack-type').value = 'channel';
             document.querySelectorAll('.cover-text-node').forEach(el => el.textContent = 'Обложка/пусто');
+            
+            // Полная очистка объекта данных
+            packData = { name: '', type: 'channel', coverFile: null, channelVideos: [], seriesSeasons: [], singleVideoFile: null };
             handleTypeChange('channel');
-        }
-
-        function submitCreatePack() {
-            const name = document.getElementById('pack-name').value;
-            if(!name.trim()) {
-                alert(settings.language === 'en' ? 'Please enter a title' : 'Пожалуйста, введите название');
-                return;
-            }
-            closeCreateModal();
-            startScan();
         }
 
         function startScan() {
@@ -1579,22 +1891,11 @@
             }
         }
 
-        function doUpdate() { next(); }
-
         function toggleSwitch(el, key) {
             el.classList.toggle('active');
             const isOn = el.classList.contains('active');
             if (key in settings) { settings[key] = isOn; }
         }
-
-        function renderStats(data) {
-            document.getElementById('stat-channels').textContent = data.channels;
-            document.getElementById('stat-series').textContent = data.series;
-            document.getElementById('stat-videos').textContent = data.videos;
-            document.getElementById('stat-movies').textContent = data.movies;
-        }
-
-        function handleAction(type) { startScan(); }
 
         function animateFinalText() {
             const title = document.getElementById('final-title');
@@ -1608,8 +1909,6 @@
                 title.appendChild(span);
             });
         }
-
-        function launchApp() { window.close(); }
 
         updateInterfaceLanguage();
     </script>

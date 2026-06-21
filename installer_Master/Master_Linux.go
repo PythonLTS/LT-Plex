@@ -22,6 +22,7 @@ type Settings struct {
 	  Theme 	string `json:"theme"`
 	  SmartPlex bool   `json:"smartPlex"`
 	  Dns		bool   `json:"dns"`
+	  Autostart bool	`json:""`
 }
 
 func getLocalIp() string {
@@ -56,12 +57,6 @@ func verifyOSName(){
 	return
 }
 
-func makeLTpack(){
-	//Создает пакет ltpack и пихает в /Films
-	//возвращая 1 если успех и 0 если нет
-	return
-}
-
 func executeSettings(){
 	//Приминение настроек (язык,тема,Доменное имя,автозапуск,включить ли дополнение)
 	//если dns истина то записать в /etc/hosts ltplex.com и айпи
@@ -83,8 +78,9 @@ func savesettings(w http.ResponseWriter,r *http.Request){
 		fmt.Println("ошибка savesettings")
 		return
 	}
-	fmt.Printf("Настройки Пришли!\n:\nФлаг запуска:%t\nЯзык:%s\nТема:%s\nДополнение:%t\nДоменное имя:%t\n",data.Status,data.Language,data.Theme,data.SmartPlex,data.Dns)
+	fmt.Printf("Настройки Пришли!\n:\nФлаг запуска:%t\nЯзык:%s\nТема:%s\nДополнение:%t\nДоменное имя:%t\nАвтозапуск:%t\n",data.Status,data.Language,data.Theme,data.SmartPlex,data.Dns,data.Autostart)
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
 
 func storageUnpack(w http.ResponseWriter,r *http.Request){
