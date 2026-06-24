@@ -382,6 +382,18 @@ func hashData(password string) string {
 	return string(hash)
 }
 
+func storageControl(w http.ResponseWriter,r *http.Request){
+	http.ServeFile(w,r,"pages/StorageControl.html")
+}
+
+func addPack(w http.ResponseWriter,r *http.Request){
+
+}
+
+func deletePack(w http.ResponseWriter,r *http.Request){
+
+}
+
 func generateToken(username string) (string, error) {
 	claims := Claims{
 		Username: username,
@@ -580,6 +592,10 @@ func main() {
 	http.HandleFunc("/l/", licenseHandler)
 	http.HandleFunc("/api/registerData/", getdataRegister)
 	http.HandleFunc("/api/loginData/", getdataLogin)
+	http.HandleFunc("/api/addPackage", addPack)
+	http.HandleFunc("/api/deletePackage", deletePack)
+	http.HandleFunc("/api/StorageInfo")
+	http.HandleFunc("/StorageControl", storageControl)
 	http.HandleFunc("/qrdata/", pushqr)
 	http.HandleFunc("/data-confirm/", qrConfirm)
 	http.HandleFunc("/data-status/", qrStatus)
