@@ -15,10 +15,12 @@ document.addEventListener("DOMContentLoaded", async function() {
         let filtredName;
         if (data.username.length > 7) {
             filtredName = data.username.slice(0, 7) + "..";
+            document.getElementById("username").textContent = filtredName;
         }
+        else {
         // Заполнение информации
-        document.getElementById("username").textContent = filtredName;
-
+            document.getElementById("username").textContent = data.username;
+        }
         const list = document.getElementById("List");
         list.innerHTML = ""; 
 

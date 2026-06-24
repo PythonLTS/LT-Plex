@@ -3,7 +3,7 @@ server
 
 database
 
-.secure/
+Database.db
 
 Films/
 

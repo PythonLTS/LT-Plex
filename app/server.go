@@ -589,7 +589,7 @@ func main() {
 	http.HandleFunc("/addfv", addFavoriteHandler)
 	http.HandleFunc("/rmfv", removeFavoriteHandler)
 	http.HandleFunc("/films", filmsHandler)
-	http.Handle("/films/", http.StripPrefix("/films/", http.FileServer(http.Dir("Films"))))
+	http.Handle("/films/", http.StripPrefix("/films/", http.FileServer(http.Dir("UserData/Films"))))
 	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("static"))))
 
 	go cleanupQRSessions()
