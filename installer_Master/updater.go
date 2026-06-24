@@ -32,13 +32,13 @@ func unzipAppFolder(archive, target string) error {
 
 	for _, file := range reader.File {
 		// Проверяем, что файл находится внутри папки app/
-		if !strings.HasPrefix(file.Name, "app/") {
+		if !strings.HasPrefix(file.Name, "LT-Plex-main/app/") {
 			continue
 		}
 
 		// Убираем префикс "app/", чтобы распаковывать содержимое прямо в /opt/ltplex/app
 		// Если тебе нужно, чтобы внутри /opt/ltplex/app создавалась еще одна папка app/, просто удали эту строку
-		relPath := strings.TrimPrefix(file.Name, "app/")
+		relPath := strings.TrimPrefix(file.Name, "LT-Plex-main/app/")
 		if relPath == "" {
 			continue
 		}
