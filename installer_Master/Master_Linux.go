@@ -9,6 +9,9 @@ import (
 	"net"
 	"encoding/json"
 	"log"
+	"strings"
+	"io"
+	"os/exec"
 )
 type Settings struct {
 	  Status 	bool   `json:"status"`
@@ -24,6 +27,10 @@ type UpdateResponse struct {
 	To      string `json:"to"`      
 	Version string `json:"version"` 
 }
+
+var downloadStatus string = "none"
+
+
 func getLocalIp() string {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -71,7 +78,7 @@ func executeSettings(language string,smart bool,dns bool,autorun bool,theme stri
 				if ipnet.IP.To4() != nil {
 					myIP := ipnet.IP.String()
 
-					name = "\n" + myIP + ":8080" + " ltplex.com\n"
+					name = "\n" + myIP + " ltplex.com\n"
 					log.Println("Доменное имя Включено :",name)
 
 				}
@@ -106,7 +113,7 @@ func executeSettings(language string,smart bool,dns bool,autorun bool,theme stri
 		return false,err
 	}
 
-	log.Println("[Debug] Настройки сохранены и пременены Успешно!!!!!!")
+	log.Println("[Debug] Настройки сохранены и пременены Успешно !!!!!!")
 
 	//Приминение настроек (язык,тема,Доменное имя,автозапуск,включить ли дополнение)
 	//если dns истина то записать в /etc/hosts ltplex.com и айпи
@@ -129,13 +136,15 @@ func savesettings(w http.ResponseWriter,r *http.Request){
 	    http.Error(w, "invalid json", http.StatusBadRequest)
 	    return
 	}
-	defer w.WriteHeader(http.StatusOK)
+	
 	defer r.Body.Close()
 	
 	fmt.Printf("[Debug] Настройки Пришли!\n:\nФлаг запуска:%t\nЯзык:%s\nТема:%s\nДополнение:%t\nДоменное имя:%t\nАвтозапуск:%t\n",data.Status,data.Language,data.Theme,data.SmartPlex,data.Dns,data.Autostart)
 	flag,err := executeSettings(data.Language,data.SmartPlex,data.Dns,data.Autostart,data.Theme)
 	if err != nil {
-		log.Fatal("[Error] saving Data | ",err)
+		log.Println("[Error]", err)
+		http.Error(w, "internal error", 500)
+		return
 	}
 	if flag {
 		log.Println("Подтверждение успешного сохранения!")
@@ -144,61 +153,105 @@ func savesettings(w http.ResponseWriter,r *http.Request){
 
 	}
 	log.Println("[Error] что-то пошло не так: нет Подтверждения")
-}
-
-
-
-func updateApp(w http.ResponseWriter, r *http.Request) {
-	log.Println("[Debug] /updateApp Обновление... ")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(""))
 }
 
+func startUpdater(){
+	log.Println("[Debug] запуск updater...")
+
+	cmd := exec.Command("./updater")
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Start()
+	if err != nil {
+		log.Println("[Error] не удалось запустить updater:", err)
+		return
+	}
+
+	log.Println("[Debug] updater запущен")
+}
+func startInstaller(){
+
+}
+func GetAppUpdate(w http.ResponseWriter, r *http.Request) {
+	log.Println("[Debug] /updateApp Обновление... ")
+	downloadStatus = "downloading"
+	go func (){
+		url := "https://github.com/PythonLTS/LT-Plex/archive/refs/heads/main.zip"
+
+		resp, err := http.Get(url)
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+
+		file, err := os.Create("update.zip")
+		if err != nil {
+			panic(err)
+		}
+		defer file.Close()
+
+		io.Copy(file, resp.Body)
+		downloadStatus = "done"
+		startUpdater()
+	}()
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": downloadStatus,
+	})
+}
+
+
+//Проверка Обновлений \ Check Updates
 func checkUpdate(w http.ResponseWriter, r *http.Request) {
 	log.Println("[Debug] /checkUpdate Проверка обновлений...")
-	data, err := os.ReadFile("../version")
+
+	
+	localBytes, err := os.ReadFile("../version")
 	if err != nil {
-		fmt.Println("error")
-		panic(err)
+		http.Error(w, "failed to read local version", http.StatusInternalServerError)
+		return
 	}
-	fmt.Println(string(data))
+	localVersion := strings.TrimSpace(string(localBytes))
+
+	
+	resp, err := http.Get("https://raw.githubusercontent.com/PythonLTS/LT-Plex/refs/heads/main/version")
+	if err != nil {
+		http.Error(w, "failed to fetch remote version", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	remoteBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(w, "failed to read remote version", http.StatusInternalServerError)
+		return
+	}
+	remoteVersion := strings.TrimSpace(string(remoteBytes))
+
+	
+	hasUpdate := remoteVersion != localVersion
 
 	w.Header().Set("Content-Type", "application/json")
 
-	// Логика: проверяем, нужно ли обновление (здесь для примера хардкод)
-	hasUpdate := true
-
-	var response UpdateResponse
-
-	if hasUpdate {
-		// Если обновление есть, отдаем true, старую и новую версию
-		response = UpdateResponse{
-			Update: true,
-			From:   "x.x.x",
-			To:     string(data),
-		}
-	} else {
-		// Если обновления нет, отдаем false и текущую актуальную версию
-		response = UpdateResponse{
-			Update:  false,
-			Version: "x.x.x",
-		}
+	response := UpdateResponse{
+		Update:  hasUpdate,
+		From:    localVersion,
+		To:      remoteVersion,
+		Version: localVersion,
 	}
-	// Упаковываем структуру в JSON и отправляем в ответ
+
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
 }
 func checkUpdateStatus(w http.ResponseWriter,r *http.Request){
-	response := map[string]string{
-		"status": "SuccessUpdate",
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": downloadStatus,
+	})
 }
 
 func root(w http.ResponseWriter,r *http.Request){
@@ -220,7 +273,7 @@ func main(){
 	fmt.Println("Успешно!\nОткройте в браузере сайт :\n",getLocalIp())
 	http.Handle("/sources/",http.StripPrefix("/sources/",http.FileServer(http.Dir("master_resources/"))))
 	http.HandleFunc("/saveSettings", savesettings)
-	http.HandleFunc("/GetUpdate", updateApp)
+	http.HandleFunc("/GetUpdate", GetAppUpdate)
 	http.HandleFunc("/CheckUpdate", checkUpdate)
 	http.HandleFunc("/UpdateStatus", checkUpdateStatus)
 	http.Handle("/resources/",http.StripPrefix("/resources/",http.FileServer(http.Dir("master_resources"))))

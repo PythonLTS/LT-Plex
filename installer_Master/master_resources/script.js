@@ -42,7 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const res = await fetch("/UpdateStatus");
           const data = await res.json();
 
-          if (data.status === "SuccessUpdate") {
+          if (data.status === "done") {
               stopWaitingUpdate();
 
               const loader = document.getElementById("loader");
@@ -195,7 +195,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // ===== APPLY UPDATE =====
     async function applyUpdate(){
       if(!updateInfo) return;
-
+      
       const res = await fetch("/GetUpdate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -203,18 +203,20 @@ document.addEventListener("DOMContentLoaded", () => {
           update: `${updateInfo.from}->${updateInfo.to}`
         })
       });
-
-      if (res.status === 200) {
+      const data = await res.json();
+      if (data.status === "downloading") {
         document.getElementById("updateBtns").classList.add("hidden");
         startWaitingUpdate();
       }
+
+      
     }
 
     // ===== FINISH =====
     async function finish(){
-        dns = document.getElementById("dns").checked,
-        smartPlex = document.getElementById("smart").checked,
-        autostart = document.getElementById("autostart").checked
+        dns = document.getElementById("dns").checked;
+        smartPlex = document.getElementById("smart").checked;
+        autostart = document.getElementById("autostart").checked;
 
       await fetch("/saveSettings", {
         method: "POST",
