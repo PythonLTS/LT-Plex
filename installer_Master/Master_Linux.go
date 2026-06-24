@@ -6,25 +6,24 @@ import (
 	"os"
 	"runtime"
 	"time"
-	"io"
-	"strings"
 	"net"
 	"encoding/json"
+	"log"
 )
-type LTpack struct {
-	Name 	string
-	TypeContent string
-
-}
 type Settings struct {
 	  Status 	bool   `json:"status"`
 	  Language  string `json:"language"`
 	  Theme 	string `json:"theme"`
 	  SmartPlex bool   `json:"smartPlex"`
 	  Dns		bool   `json:"dns"`
-	  Autostart bool	`json:""`
+	  Autostart bool	`json:"autostart"`
 }
-
+type UpdateResponse struct {
+	Update  bool   `json:"update"`  
+	From    string `json:"from"`    
+	To      string `json:"to"`      
+	Version string `json:"version"` 
+}
 func getLocalIp() string {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -57,17 +56,68 @@ func verifyOSName(){
 	return
 }
 
-func executeSettings(){
+func executeSettings(language string,smart bool,dns bool,autorun bool,theme string) (bool,error){
+	path := "master_resources/master_data.json"
+	var name string
+	if (dns){
+		addrs, err := net.InterfaceAddrs()
+		if err != nil {
+			fmt.Printf("[Ошибка!] не удалось получить интерфейсы: %v", err)
+			os.Exit(1)
+		}
+
+		for _, address := range addrs {
+			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				if ipnet.IP.To4() != nil {
+					myIP := ipnet.IP.String()
+
+					name = "\n" + myIP + ":8080" + " ltplex.com\n"
+					log.Println("Доменное имя Включено :",name)
+
+				}
+			}
+		}
+	}
+	log.Println("Язык сохранен: ",language)
+	if (smart){
+		log.Println("SmartTV Дополнение Сохранено: ",smart)
+	}
+	if (autorun){
+		log.Println("Автозапуск включен!")
+	}
+	log.Println("Сохранена тема: ",theme)
+	settings := Settings{
+		Status:    true,
+		Language:  language,
+		Theme:     theme,
+		SmartPlex: smart,
+		Dns:       dns,
+		Autostart: autorun,
+	}
+	jsonData, err := json.MarshalIndent(settings, "", "    ")
+	if err != nil {
+		log.Println("[Error] Не удалось создать JSON:", err)
+		return false,err
+	}
+
+	err = os.WriteFile(path, jsonData, 0644)
+	if err != nil {
+		log.Println("[Error] Не удалось сохранить настройки:", err)
+		return false,err
+	}
+
+	log.Println("[Debug] Настройки сохранены и пременены Успешно!!!!!!")
+
 	//Приминение настроек (язык,тема,Доменное имя,автозапуск,включить ли дополнение)
 	//если dns истина то записать в /etc/hosts ltplex.com и айпи
 	//если автозапуск истина то делать systemd target или сервис
-	//если включено дополнение , включить дополнение XD.
-	//язык сохранить в settings.json как и тему а так же параметры что включено 
-	return
+	//если включено дополнение ,включить его
+	//язык сохранить в settings.json в самом приложении как и тему а так же параметры что включено 
+	return true,nil
 }
 
 func savesettings(w http.ResponseWriter,r *http.Request){
-
+	log.Println("[Debug] Сохранение настроек")
 	var data Settings
 
 	decoder := json.NewDecoder(r.Body)
@@ -75,124 +125,80 @@ func savesettings(w http.ResponseWriter,r *http.Request){
 	
 	err := decoder.Decode(&data)
 	if err != nil {
-		fmt.Println("ошибка savesettings")
-		return
+	    log.Println("[Error] ошибка savesettings:", err)
+	    http.Error(w, "invalid json", http.StatusBadRequest)
+	    return
 	}
-	fmt.Printf("Настройки Пришли!\n:\nФлаг запуска:%t\nЯзык:%s\nТема:%s\nДополнение:%t\nДоменное имя:%t\nАвтозапуск:%t\n",data.Status,data.Language,data.Theme,data.SmartPlex,data.Dns,data.Autostart)
+	defer w.WriteHeader(http.StatusOK)
+	defer r.Body.Close()
+	
+	fmt.Printf("[Debug] Настройки Пришли!\n:\nФлаг запуска:%t\nЯзык:%s\nТема:%s\nДополнение:%t\nДоменное имя:%t\nАвтозапуск:%t\n",data.Status,data.Language,data.Theme,data.SmartPlex,data.Dns,data.Autostart)
+	flag,err := executeSettings(data.Language,data.SmartPlex,data.Dns,data.Autostart,data.Theme)
+	if err != nil {
+		log.Fatal("[Error] saving Data | ",err)
+	}
+	if flag {
+		log.Println("Подтверждение успешного сохранения!")
+
+		return
+
+	}
+	log.Println("[Error] что-то пошло не так: нет Подтверждения")
+}
+
+
+
+func updateApp(w http.ResponseWriter, r *http.Request) {
+	log.Println("[Debug] /updateApp Обновление... ")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	w.Write([]byte(""))
 }
 
-func storageUnpack(w http.ResponseWriter,r *http.Request){
-	//принимает ltpack пакеты , нужно проверить сразу , тот ли это пакет, если да то проверить структуру если можно и распаковать в /Films(опять же я поменяю потом)
-	return
-}
-
-func storageCapacity(w http.ResponseWriter,r *http.Request){
-	//TEST только mb/gb
-	w.Write([]byte("726GB"))
-	//нужно вернуть число как в тест но настоящее свободное место на устройстве
-	return
-}
-
-func storagestatus(w http.ResponseWriter,r *http.Request){
-	//вернуть список /Films (путь сам поменяю), только типы и количество по типу (1 видео , 2 фильма, 20 сериалов,3 канала)
-	return
-}
-
-func updateapp(w http.ResponseWriter, r *http.Request) {
-
-	// ==========================================================================
-	// ШАГ 1: ПОЛУЧЕНИЕ ИЗ ЛОКАЛЬНОГО ФАЙЛА ТЕКУЩЕЙ ВЕРСИИ ПРИЛОЖЕНИЯ
-	// ==========================================================================
-
-	// Читаем массив байт из файла, который лежит на один уровень выше текущей папки
-	localBytes, err := os.ReadFile("../version")
+func checkUpdate(w http.ResponseWriter, r *http.Request) {
+	log.Println("[Debug] /checkUpdate Проверка обновлений...")
+	data, err := os.ReadFile("../version")
 	if err != nil {
-		// Если файла нет или к нему нет доступа, отдаем клиенту ошибку 500 Internals Server Error
-		http.Error(w, "Ошибка чтения локальной версии", http.StatusInternalServerError)
-		return // Прерываем выполнение функции
+		fmt.Println("error")
+		panic(err)
 	}
+	fmt.Println(string(data))
 
-	// Переводим байты в строку и очищаем от случайных пробелов и переносов строк (\n, \r)
-	currentVersion := strings.TrimSpace(string(localBytes))
-	
-	// Выводим в консоль сервера текущую версию для логирования
-	fmt.Println("Текущая локальная версия:", currentVersion)
+	w.Header().Set("Content-Type", "application/json")
 
+	// Логика: проверяем, нужно ли обновление (здесь для примера хардкод)
+	hasUpdate := true
 
-	// ==========================================================================
-	// ШАГ 2: ЗАПРОС СВЕЖЕЙ ВЕРСИИ С REPO GITHUB (СЕТЕВОЙ ЗАПРОС)
-	// ==========================================================================
+	var response UpdateResponse
 
-	// Ссылка на raw-файл в репозитории GitHub, где всегда написана актуальная версия
-	url := "https://raw.githubusercontent.com/PythonLTS/LT-Plex/main/version"
-
-	// Создаем HTTP-клиент с жестким таймаутом в 5 секунд (чтобы сервер не завис, если гитхаб недоступен)
-	client := &http.Client{
-		Timeout: 5 * time.Second,
+	if hasUpdate {
+		// Если обновление есть, отдаем true, старую и новую версию
+		response = UpdateResponse{
+			Update: true,
+			From:   "x.x.x",
+			To:     string(data),
+		}
+	} else {
+		// Если обновления нет, отдаем false и текущую актуальную версию
+		response = UpdateResponse{
+			Update:  false,
+			Version: "x.x.x",
+		}
 	}
-
-	// Выполняем GET-запрос по указанному URL-адресу
-	resp, err := client.Get(url)
+	// Упаковываем структуру в JSON и отправляем в ответ
+	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
-		// Безопасный сценарий: если упал интернет или лежат сервера GitHub, 
-		// возвращаем клиенту "0" (как будто обновлений нет), чтобы не ломать мастер установки
-		w.Write([]byte("0"))
-		return // Прерываем выполнение функции
-	}
-	
-	// Обязательно закрываем тело ответа (Body) после завершения работы функции,
-	// чтобы избежать утечки оперативной памяти и сетевых соединений
-	defer resp.Body.Close()
-
-
-	// ==========================================================================
-	// ШАГ 3: ЧТЕНИЕ И ОБРАБОТКА ДАННЫХ ИЗ ОТВЕТА GITHUB
-	// ==========================================================================
-
-	// Выкачиваем всё содержимое ответа (тело страницы/файла) в виде массива байт
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		// На случай, если соединение оборвалось во время скачивания данных
-		w.Write([]byte("0"))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// Переводим полученные байты с GitHub в строку и тоже очищаем от скрытых символов переноса строк
-	latest := strings.TrimSpace(string(body))
 	
-	// Выводим в консоль сервера последнюю версию с гитхаба для логирования
-	fmt.Println("Актуальная версия на GitHub:", latest)
+}
+func checkUpdateStatus(w http.ResponseWriter,r *http.Request){
+	response := map[string]string{
+		"status": "SuccessUpdate",
+	}
 
-
-	// ==========================================================================
-	// ШАГ 4: СРАВНЕНИЕ ВЕРСИЙ И СВЕРКА РЕЗУЛЬТАТОВ
-	// ==========================================================================
-
-	// Если версия на гитхабе ОТЛИЧАЕТСЯ от нашей локальной версии
-	if latest != currentVersion {
-		
-		// Отправляем HTTP статус 200 OK
-		w.WriteHeader(http.StatusOK)
-		
-		// Пишем в ответ "1", сигнализируя веб-интерфейсу, что нужно показать плашку обновления
-		w.Write([]byte("1")) 
-		
-		// ----------------------------------------------------------------------
-		// ПЛАН НА БУДУЩЕЕ: Автоматическое фоновое обновление программы
-		// ----------------------------------------------------------------------
-		// Здесь можно будет запустить параллельный процесс (горутину) скачивания и установки:
-		// go startSelfUpdate() 
-		
-	} else {
-		
-		// Если версии полностью совпадают (обновление не требуется)
-		w.WriteHeader(http.StatusOK)
-		
-		// Пишем в ответ "0" — у пользователя установлена самая последняя версия
-		w.Write([]byte("0")) 
-    }
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func root(w http.ResponseWriter,r *http.Request){
@@ -202,6 +208,10 @@ func root(w http.ResponseWriter,r *http.Request){
 
 func main(){
 	fmt.Println("### Инициализация ###")
+	if os.Geteuid() != 0 {
+	    log.Fatal("Запустите программу через sudo")
+	    os.Exit(1)
+	}
 	verifyOSName()
 	fmt.Println("Проверка прошла успешно!")
 	time.Sleep(500 * time.Millisecond)
@@ -210,10 +220,9 @@ func main(){
 	fmt.Println("Успешно!\nОткройте в браузере сайт :\n",getLocalIp())
 	http.Handle("/sources/",http.StripPrefix("/sources/",http.FileServer(http.Dir("master_resources/"))))
 	http.HandleFunc("/saveSettings", savesettings)
-	http.HandleFunc("/UploadPack", storageUnpack)
-	http.HandleFunc("/Storage", storagestatus)
-	http.HandleFunc("/StorageCapacity", storageCapacity)
-	http.HandleFunc("/Update", updateapp)
+	http.HandleFunc("/GetUpdate", updateApp)
+	http.HandleFunc("/CheckUpdate", checkUpdate)
+	http.HandleFunc("/UpdateStatus", checkUpdateStatus)
 	http.Handle("/resources/",http.StripPrefix("/resources/",http.FileServer(http.Dir("master_resources"))))
 	http.HandleFunc("/",root)
 	http.ListenAndServe(":8080",nil)

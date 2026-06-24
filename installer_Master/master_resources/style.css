@@ -1,148 +1,249 @@
-* {
-	box-sizing: border-box;
-	padding: 0;
-	margin: 0;
+:root {
+  --bg: #0a0a0a;         /* Чуть глубже темный */
+  --fg: #ededed;
+  --muted: #8e8e93;      /* Более благородный серый */
+  --accent: #ffffff;
+  --card: #141414;       /* Мягкий контраст с фоном */
+  --border: rgba(255, 255, 255, 0.08); /* Тонкая стильная граница */
+  --shadow: rgba(0, 0, 0, 0.4);
+  --radius-lg: 16px;     /* Современные скругления чуть больше */
+  --radius-md: 10px;
+  --transition: 0.25s ease; /* Быстрая и плавная анимация */
 }
-html {width:100% ;height:100%;}
-body {
-	width: 100%;
-	height: 100%;
-	display: flex;
-	justify-content: center;
-	background-color: rgb(20, 20, 19);
+
+body.light {
+  --bg: #f9f9fb;         /* Свежий, слегка сероватый белый */
+  --fg: #1c1c1e;
+  --muted: #636366;
+  --accent: #000000;
+  --card: #ffffff;
+  --border: rgba(0, 0, 0, 0.06);
+  --shadow: rgba(0, 0, 0, 0.03);
 }
+
 @font-face {
-	font-family: 'Master';
-	src:url('/resources/NotoSans-Regular.ttf');
-}
-.container-main {
-	display: block;
-	position: relative;
-	margin-top: 230px;
-	border: solid rgb(60,60,60) 2px;
-	border-radius: 10px;
-	width: 60%;
-	height: 500px;
-}
-.title-window {
-	display: block;
-	position: relative;
-	top:40px;
-	left:70px;
-	color:black;
-	font-family: 'Master';
-	font-size: 40px;
-	animation: welcomeH1 700ms forwards;
-}
-.subtitle-window {
-	display: block;
-
-	position: relative;
-	width: 700px;
-	top:60px;
-	left:70px;
-	opacity: 0;
-	font-family: 'Master';
-	font-size: 20px;
-	animation: welcomeH2 400ms forwards 1s;
-	
-}
-@keyframes welcomeH1 {
-	0% {
-		transform: translateY(-30px) translateX(-20px);
-	}
-	100% {
-		color: white;
-	}
-
-}
-@keyframes welcomeH2 {
-	0% {
-		opacity: 0;
-	}
-	100% {
-		color: rgb(130, 130, 130);
-		opacity: 1;
-	}
+  font-family: 'Master';
+  src: url('/resources/NotoSans-Regular.ttf');
+  font-display: swap; /* Чтобы текст не моргал при загрузке */
 }
 
-
-.container-next-prev {
-	display: flex;
-	position: absolute;
-	align-items: center;
-	flex-direction: row-reverse;
-	gap: 5px;
-	bottom: 40px;
-	right: 80px;
-	border: none;
-	width: auto;
-	height: auto;
-
+body {
+  margin: 0;
+  font-family: 'Master', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg);
+  color: var(--fg);
+  /* Анимируем только цвет, чтобы не дергались размеры элементов */
+  transition: background-color var(--transition), color var(--transition);
+  -webkit-font-smoothing: antialiased; /* Делает шрифт тоньше и аккуратнее */
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.buttons-next-prev {
-	cursor: pointer;
-	color: rgb(255,255,255);
-	background-color: rgb(0,0,0);
-	outline: none;
-	border: solid 2px rgba(255,255,255,0.3);
-	width: 150px;
-	height: 45px;
-	text-align: center;
-	opacity: 0;
-	animation: buttons-nextprev-Animation 300ms forwards 2s;
+.container {
+  max-width: 630px; /* Чуть компактнее — выглядит аккуратнее */
+  margin: 230px auto;
+  padding: 0 24px;
 }
 
-@keyframes buttons-nextprev-Animation {
-	0%{
-		transform: translateY(10px);
-
-		opacity: 0;
-	}
-	100%{
-		opacity: 1;
-	}
+.card {
+  background: var(--card);
+  padding: 28px; /* Больше отступов внутри = больше "дорогого" воздуха */
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 30px var(--shadow);
+  transition: background-color var(--transition), border-color var(--transition), transform var(--transition);
 }
 
-.container-languageSelect {
-	display: block;
-	position: relative;
-	margin-top: 230px;
-	border: solid rgb(60,60,60) 2px;
-	border-radius: 10px;
-	width: 40%;
-	height: 500px;
+/* Легкий интерактив для карточки */
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
 }
-.langs-mini-container {
-	position: relative;
-	top: 200px;
-	left: 100px;
-	border: none;
-	width: 45%;
-	height: 10%;
-	opacity: 0;
-	animation: lang-buttons-animation 300ms forwards 1s;
+body.light .card:hover {
+  border-color: rgba(0, 0, 0, 0.1);
 }
-.langs-mini-container #rus,.langs-mini-container #en {
-	width: 140px;
-	height: 60px;
-	color: white;
-	border: solid transparent 1px;
-	border-radius: 5px;
-	background-color: rgb(36, 36, 36);
-	transition: border 200ms ;
-	cursor: pointer;
+
+h1 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em; /* Легкое сужение для заголовков — тренд */
+  margin-top: 0;
+  margin-bottom: 12px;
 }
-.langs-mini-container #rus:hover,.langs-mini-container #en:hover {
-	border: solid white 1px;
+
+p {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6; /* Увеличили межстрочный интервал для читаемости */
+  margin-bottom: 24px;
 }
-@keyframes lang-buttons-animation {
-	0%{
-		opacity: 0;
-		transform: translateY(10px);
-	}
-	100%{
-		opacity: 1;
-	}
+
+button {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  padding: 10px 18px;
+  margin-right: 8px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity var(--transition), transform 0.1s ease;
+}
+
+button:hover {
+  opacity: 0.7; /* Мягкое затухание при наведении */
+}
+
+button:active {
+  transform: scale(0.98); /* Эффект нажатия */
+}
+
+button.secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+
+button.secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 1;
+}
+body.light button.secondary:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.dots {
+  display: flex;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border); /* Точки теперь не такие яркие */
+  transition: background-color var(--transition), transform var(--transition);
+}
+
+.dot.active {
+  background: var(--accent);
+  transform: scale(1.2); /* Активная точка чуть выделяется размером */
+}
+
+.hidden { 
+  display: none; 
+}
+/* Контейнер для списка настроек */
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;          /* Красивый отступ между строками */
+  margin: 24px 0 32px 0; /* Отступы: 24px от заголовка и 32px до кнопки */
+}
+
+/* Строка с тумблером */
+.toggle-label {
+  display: flex;
+  justify-content: space-between; /* Текст уходит влево, тумблер вправо */
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 4px 0;    /* Чуть расширяем зону клика */
+}
+
+/* Скрываем стандартный чекбокс */
+.toggle-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* Оболочка тумблера */
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background-color: var(--border);
+  border-radius: 12px;
+  transition: background-color var(--transition);
+}
+
+/* Кружочек внутри */
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background-color: var(--fg);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform var(--transition), background-color var(--transition);
+}
+
+/* Анимация включения */
+.toggle-input:checked + .toggle-switch {
+  background-color: var(--accent);
+}
+
+.toggle-input:checked + .toggle-switch::after {
+  transform: translateX(20px);
+  background-color: var(--bg); /* Контраст для кружка в активном состоянии */
+}
+
+/* Фокус для доступности (управление с клавиатуры) */
+.toggle-input:focus-visible + .toggle-switch {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Кнопка "Далее" (сделаем её чуть пошире для баланса) */
+.buttons-group {
+  display: flex;
+  gap: 12px; /* Расстояние между кнопками */
+  width: 100%;
+}
+
+/* Общие стили для кнопок внутри группы */
+.action-btn {
+  flex: 1;           /* Обе кнопки будут одинаковой ширины (50/50) */
+  box-sizing: border-box;
+  justify-content: center;
+  display: flex;
+  padding: 12px;
+  margin: 0;         /* Сбрасываем старые маргины */
+}
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255,255,255,0.2);
+  border-top: 4px solid #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 20px auto;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.checkmark {
+  font-size: 40px;
+  color: #4caf50;
+  text-align: center;
+  margin: 20px 0;
 }
