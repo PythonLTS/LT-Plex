@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", async function() {
                 
                 const img = document.createElement("img");
                 img.className = "movie-banner";
-                img.src = `/films/${rawName}/${rawName}.png`;
+                img.src = `/films/${rawName}/${rawName}.jpeg`;
                 img.alt = name;
                 
                 

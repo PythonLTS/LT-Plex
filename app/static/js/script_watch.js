@@ -48,7 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 				
 				const video = document.querySelector("video");
-				video.src = `/films/${name}/Season${seasonNum}/Episode${epNum}/Episode${epNum}.mp4`;
+				video.src = `/films/${name}/Season${seasonNum}/Episode${epNum}.mp4`;
 				video.load();
 				video.play();
 			});

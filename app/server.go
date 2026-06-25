@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -17,7 +18,8 @@ import (
 	"github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
 	_ "github.com/mattn/go-sqlite3"
-
+	"path/filepath"
+	"archive/zip"
 
 	"fmt"
 )
@@ -56,6 +58,68 @@ type StorageInfoResponse struct {
 type FolderMeta struct {
 	Name string `json:"Name"`
 	Type string `json:"Type"`
+	Quantity int `json:"Quantity"`
+}
+
+type FileItemResponse struct {
+	Name string `json:"name"`
+	Logo string `json:"logo"`
+}
+
+type MetaData struct {
+	Name              string   `json:"Name"`
+	Type              string   `json:"Type"` // series, movie, channel
+	Quantity          int      `json:"Quantity,omitempty"`
+	Seasons           int      `json:"Seasons,omitempty"`
+	EpisodesPerSeason []int    `json:"EpisodesPerSeason,omitempty"`
+}
+
+type TemplateData struct {
+	Name string
+	Meta MetaData
+}
+
+func getContentListByType(root string, targetType string) []FileItemResponse {
+	list := make([]FileItemResponse, 0)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return list
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		folder := entry.Name()
+		metaPath := fmt.Sprintf("%s/%s/meta.json", root, folder)
+		metaData, err := os.ReadFile(metaPath)
+		if err != nil {
+			continue
+		}
+
+		var meta FolderMeta
+		if err := json.Unmarshal(metaData, &meta); err != nil {
+			continue
+		}
+
+		if strings.ToLower(meta.Type) == strings.ToLower(targetType) {
+			// Формируем путь к обложке: /films/Имя_Папки/Имя_Папки.jpeg
+			// (Твой статический роут в main раздает UserData/Films через префикс /films/)
+			logoPath := fmt.Sprintf("/films/%s/%s.jpeg", folder, folder)
+			
+			// Проверим физически, есть ли файл на диске, если нет — ставим заглушку
+			if _, err := os.Stat(fmt.Sprintf("%s/%s/%s.jpeg", root, folder, folder)); os.IsNotExist(err) {
+				logoPath = "/s/images/unknown.png"
+			}
+
+			list = append(list, FileItemResponse{
+				Name: folder,
+				Logo: logoPath,
+			})
+		}
+	}
+	return list
 }
 
 func getDiskCapacity()string{
@@ -107,7 +171,7 @@ func allFilmsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func scanFilms() []map[string]string {
-	root := "Films"
+	root := "UserData/Films"
 
 	// Проверяем, существует ли папка. Если нет — создаем с правами 0755
 	if _, err := os.Stat(root); os.IsNotExist(err) {
@@ -139,7 +203,7 @@ func scanFilms() []map[string]string {
 
 		files, _ := ioutil.ReadDir(root + "/" + folder)
 		for _, f := range files {
-			if !f.IsDir() && strings.HasSuffix(strings.ToLower(f.Name()), ".png") {
+			if !f.IsDir() && strings.HasSuffix(strings.ToLower(f.Name()), ".jpeg") {
 				logo = "/films/" + folder + "/" + f.Name()
 				break
 			}
@@ -478,17 +542,17 @@ func countContentByMeta(root string) (movies int, series int, channels int) {
 }
 
 func StorageInfo(w http.ResponseWriter, r *http.Request) {
+
 	queryParams := r.URL.Query()
 	mode := queryParams.Get("mode")
+	
+	rootPath := "UserData/Films"
 
+	// Режим 1: Общая статистика для главного экрана
 	if mode == "list" {
-		// 1. Получаем свободное место на диске
 		freeMemory := getDiskCapacity()
+		moviesCount, seriesCount, channelsCount := countContentByMeta(rootPath)
 
-		// 2. Считаем контент по мета-файлам в "UserData/Films"
-		moviesCount, seriesCount, channelsCount := countContentByMeta("UserData/Films")
-
-		// 3. Собираем структуру ответа
 		response := StorageInfoResponse{
 			Movies:    moviesCount,
 			Channels:  channelsCount,
@@ -496,23 +560,27 @@ func StorageInfo(w http.ResponseWriter, r *http.Request) {
 			FreeSpace: freeMemory,
 		}
 
-		// 4. Отдаем JSON на фронтенд
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	// Твои логи для других режимов
-	if mode == "series" {
-		log.Println("Requested mode: series")
-	}
-	if mode == "movie" {
-		log.Println("Requested mode: movie")
-	}
-	if mode == "channel" {
-		log.Println("Requested mode: channel")
+	// Режим 2: Запрос конкретного контента для модалки по клику
+	if mode == "movie" || mode == "series" || mode == "channel" {
+		// Собираем слайс структур FileItemResponse
+		filesList := getContentListByType(rootPath, mode)
+		
+		// Если ничего не нашли, отдаем пустой массив [], а не null, чтобы JS не падал
+		if filesList == nil {
+			filesList = make([]FileItemResponse, 0)
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(filesList)
+		return
 	}
 
+	// Если mode не подошёл ни под один критерий
 	http.Error(w, "Missing or invalid 'mode' parameter.", http.StatusBadRequest)
 }
 
@@ -521,12 +589,158 @@ func storageControl(w http.ResponseWriter,r *http.Request){
 	
 }
 
-func addPack(w http.ResponseWriter,r *http.Request){
+func GenerateHTML(name string,mode string,) string{
+	if mode == "series"{
 
+	}
+	if mode == "channel"{
+
+	}
+	if mode == "movie"{}
 }
 
-func deletePack(w http.ResponseWriter,r *http.Request){
+func addPack(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
+	fileName := r.Header.Get("X-File-Name")
+	if fileName == "" {
+		http.Error(w, "missing file name", http.StatusBadRequest)
+		return
+	}
+
+	fileName = filepath.Base(fileName)
+
+	baseName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	packDir := filepath.Join("UserData/Films", baseName)
+
+	if err := os.MkdirAll(packDir, 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	zipPath := filepath.Join(packDir, fileName)
+
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer zipFile.Close()
+
+	if _, err := io.Copy(zipFile, r.Body); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer reader.Close()
+
+	for _, f := range reader.File {
+		targetPath := filepath.Join(packDir, f.Name)
+
+		// защита от Zip Slip
+		if !strings.HasPrefix(
+			filepath.Clean(targetPath),
+			filepath.Clean(packDir)+string(os.PathSeparator),
+		) {
+			continue
+		}
+
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(targetPath), os.ModePerm); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		src, err := f.Open()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		dst, err := os.OpenFile(
+			targetPath,
+			os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
+			f.Mode(),
+		)
+		if err != nil {
+			src.Close()
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		_, err = io.Copy(dst, src)
+
+		dst.Close()
+		src.Close()
+
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// удаляем загруженный zip после распаковки
+	_ = os.Remove(zipPath)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("done"))
+}
+
+func deletePack(w http.ResponseWriter, r *http.Request) {
+	// Проверяем метод (наш фронт шлёт DELETE)
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Достаем параметры из URL: ?mode=movie&name=Mr_Robot
+	queryParams := r.URL.Query()
+	mode := queryParams.Get("mode")
+	name := queryParams.Get("name")
+
+	// Базовая валидация, чтобы случайно не потереть лишнего
+	if mode == "" || name == "" || strings.Contains(name, "..") || strings.Contains(name, "/") {
+		http.Error(w, "Invalid parameters", http.StatusBadRequest)
+		return
+	}
+
+	// Собираем прямой путь к папке контента
+	targetPath := fmt.Sprintf("UserData/Films/%s", name)
+
+	// Проверяем, существует ли вообще такая папка
+	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+		http.Error(w, "Folder not found", http.StatusNotFound)
+		return
+	}
+
+	// Удаляем папку со всем содержимым (медиа, картинки, meta.json)
+	err := os.RemoveAll(targetPath)
+	if err != nil {
+		log.Printf("Ошибка удаления папки %s: %v", targetPath, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Успешно удален пакет: %s (тип: %s)", name, mode)
+
+	// Отдаем фронту "ok", как он и ждет
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
 
 func generateToken(username string) (string, error) {
@@ -740,7 +954,7 @@ func main() {
 	http.HandleFunc("/addfv", addFavoriteHandler)
 	http.HandleFunc("/rmfv", removeFavoriteHandler)
 	http.HandleFunc("/films", filmsHandler)
-	http.Handle("/films/", http.StripPrefix("/films/", http.FileServer(http.Dir("UserData/Films"))))
+	http.Handle("/films/", http.StripPrefix("/films/", http.FileServer(http.Dir("UserData/Films/"))))
 	http.Handle("/s/", http.StripPrefix("/s/", http.FileServer(http.Dir("static"))))
 
 	go cleanupQRSessions()

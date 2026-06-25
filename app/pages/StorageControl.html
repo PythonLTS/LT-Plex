@@ -5,9 +5,10 @@
     <title>Панель управления Хранилищем LT-Plex</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" type="text/css" href="/s/css/StorageControl.css">
+    <script src="/s/js/jszip.min.js"></script>
 </head>
 <body>
-
+    <button id="back">Назад</button>
     <div class="dashboard-container">
         <header class="dashboard-header">
             <h1 class="dashboard-title">Панель управления Хранилищем LT-Plex</h1>
@@ -29,7 +30,17 @@
 
         </div>
     </div>
-
+    <div id="storageOverlay" class="storage-modal">
+        <div class="modal-body">
+            <div class="modal-header">
+                <h3 id="drawerTitle">Просмотр</h3>
+                <button id="closeDrawer" class="btn-close">&times;</button>
+            </div>
+            <div id="drawerContent" class="modal-content">
+                </div>
+        </div>
+    </div>
+    
     <script src="/s/js/StorageControl.js"></script>
 </body>
 </html>
