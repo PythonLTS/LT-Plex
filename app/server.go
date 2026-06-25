@@ -20,6 +20,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"path/filepath"
 	"archive/zip"
+	"html/template"
 
 	"fmt"
 )
@@ -75,8 +76,10 @@ type MetaData struct {
 }
 
 type TemplateData struct {
-	Name string
-	Meta MetaData
+	Name       string
+	FolderAttr string // Имя папки для URL (например, Mr_Robot)
+	Meta       MetaData
+	Videos     []string // Только для каналов: список реальных имен файлов
 }
 
 func getContentListByType(root string, targetType string) []FileItemResponse {
@@ -589,14 +592,67 @@ func storageControl(w http.ResponseWriter,r *http.Request){
 	
 }
 
-func GenerateHTML(name string,mode string,) string{
-	if mode == "series"{
+func GenerateHTML(meta MetaData, folderName string, packDir string) (string, error) {
+	var rawTemplate string
 
+	switch meta.Type {
+	case "movie":
+		rawTemplate = tmplMovie
+	case "series":
+		rawTemplate = tmplSeries
+	case "channel":
+		rawTemplate = tmplChannel
+	default:
+		return "", nil
 	}
-	if mode == "channel"{
 
+	// Для каналов собираем реальные имена файлов из папки
+	var videoFiles []string
+	if meta.Type == "channel" {
+		files, err := os.ReadDir(packDir)
+		if err == nil {
+			for _, f := range files {
+				if !f.IsDir() && strings.HasSuffix(strings.ToLower(f.Name()), ".mp4") {
+					videoFiles = append(videoFiles, f.Name())
+				}
+			}
+		}
 	}
-	if mode == "movie"{}
+
+	funcMap := template.FuncMap{
+		"add": func(a, b int) int { return a + b },
+		"seq": func(start, end int) []int {
+			s := make([]int, end-start+1)
+			for i := range s {
+				s[i] = start + i
+			}
+			return s
+		},
+		// Хелпер для красивого отображения имени видео (убирает .mp4 и заменяет _ на пробел)
+		"cleanName": func(filename string) string {
+			name := strings.TrimSuffix(filename, filepath.Ext(filename))
+			return strings.ReplaceAll(name, "_", " ")
+		},
+	}
+
+	tmpl, err := template.New("player").Funcs(funcMap).Parse(rawTemplate)
+	if err != nil {
+		return "", err
+	}
+
+	var buf strings.Builder
+	data := TemplateData{
+		Name:       strings.ReplaceAll(meta.Name, "_", " "), // Красивое имя для заголовка
+		FolderAttr: folderName,                              // Имя папки для URL
+		Meta:       meta,
+		Videos:     videoFiles,
+	}
+
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }
 
 func addPack(w http.ResponseWriter, r *http.Request) {
@@ -612,7 +668,6 @@ func addPack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileName = filepath.Base(fileName)
-
 	baseName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 	packDir := filepath.Join("UserData/Films", baseName)
 
@@ -622,7 +677,6 @@ func addPack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	zipPath := filepath.Join(packDir, fileName)
-
 	zipFile, err := os.Create(zipPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -645,7 +699,6 @@ func addPack(w http.ResponseWriter, r *http.Request) {
 	for _, f := range reader.File {
 		targetPath := filepath.Join(packDir, f.Name)
 
-		// защита от Zip Slip
 		if !strings.HasPrefix(
 			filepath.Clean(targetPath),
 			filepath.Clean(packDir)+string(os.PathSeparator),
@@ -684,7 +737,6 @@ func addPack(w http.ResponseWriter, r *http.Request) {
 		}
 
 		_, err = io.Copy(dst, src)
-
 		dst.Close()
 		src.Close()
 
@@ -694,12 +746,254 @@ func addPack(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// удаляем загруженный zip после распаковки
 	_ = os.Remove(zipPath)
+
+	metaPath := filepath.Join(packDir, "meta.json")
+	metaFile, err := os.Open(metaPath)
+	if err != nil {
+		http.Error(w, "meta.json not found in archive", http.StatusBadRequest)
+		return
+	}
+	defer metaFile.Close()
+
+	var meta MetaData
+	if err := json.NewDecoder(metaFile).Decode(&meta); err != nil {
+		http.Error(w, "invalid meta.json format: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Передаем baseName (имя папки) и packDir для сканирования файлов канала
+	htmlContent, err := GenerateHTML(meta, baseName, packDir)
+	if err != nil {
+		http.Error(w, "failed to generate HTML: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Сохраняем файл как Имя_Архива.html
+	indexPath := filepath.Join(packDir, baseName+".html")
+	if err := os.WriteFile(indexPath, []byte(htmlContent), 0644); err != nil {
+		http.Error(w, "failed to save html: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("done"))
 }
+
+const tmplMovie = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{.Name}}</title>
+<style>
+:root{--bg:#0a0a0a;--panel:#141414;--panel2:#1b1b1b;--border:#2a2a2a;--text:#ffffff;--muted:#9a9a9a;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui;}
+body{background:var(--bg);color:var(--text);}
+#topbar{display:flex;align-items:center;gap:14px;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--border);}
+#back{background:var(--panel2);border:1px solid var(--border);padding:8px 14px;border-radius:10px;color:white;cursor:pointer;}
+#content{display:flex;height:calc(100vh - 60px);}
+#info{width:320px;background:var(--panel);border-right:1px solid var(--border);padding:20px;}
+#info h2{margin-bottom:8px;}
+#info p{color:var(--muted);margin-top:10px;}
+#player{flex:1;display:flex;align-items:center;justify-content:center;padding:20px;}
+video{width:100%;height:100%;border-radius:14px;background:black;box-shadow:0 0 30px rgba(0,0,0,0.6);}
+</style>
+</head>
+<body>
+<div id="topbar">
+    <button id="back" onclick="window.history.back()">← Back</button>
+    <h1>{{.Name}}</h1>
+</div>
+<div id="content">
+    <div id="info">
+        <h2>{{.Name}}</h2>
+        <p>Movie</p>
+    </div>
+    <div id="player">
+        <video src="/films/{{.FolderAttr}}/{{.FolderAttr}}.mp4" controls></video>
+    </div>
+</div>
+</body>
+</html>`
+
+const tmplSeries = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{.Name}}</title>
+<style>
+:root{--bg:#0a0a0a;--panel:#141414;--panel2:#1b1b1b;--border:#2a2a2a;--text:#fff;--muted:#9a9a9a;--accent:#e5a00d;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui;}
+body{background:var(--bg);color:var(--text);}
+#topbar{padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:center;}
+#back{background:var(--panel2);border:1px solid var(--border);padding:8px 14px;border-radius:10px;color:white;cursor:pointer;}
+#content{display:flex;height:calc(100vh - 60px);}
+#sidebar{width:340px;background:var(--panel);border-right:1px solid var(--border);overflow:auto;padding:16px;}
+.season{margin-bottom:10px;}
+.season-header{background:var(--panel2);padding:12px;border-radius:10px;cursor:pointer;border:1px solid var(--border);}
+.season-header:hover, .season-header.active{background:#222;}
+.episodes{list-style:none;margin-top:8px;padding-left:10px;display:none;}
+.episodes li{padding:10px;margin:6px 0;background:var(--panel2);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--muted);}
+.episodes li:hover{background:#222;color:white;}
+.episodes li.active{background:var(--accent);color:black;font-weight:600;border:none;}
+#player{flex:1;display:flex;justify-content:center;align-items:center;padding:20px;}
+video{width:100%;height:100%;border-radius:14px;background:black;box-shadow:0 0 30px rgba(0,0,0,0.6);}
+</style>
+</head>
+<body>
+<div id="topbar">
+    <button id="back" onclick="window.history.back()">← Back</button>
+    <h1>{{.Name}}</h1>
+</div>
+<div id="content">
+    <div id="sidebar">
+        {{range $index, $epCount := .Meta.EpisodesPerSeason}}
+        {{$seasonNum := add $index 1}}
+        <div class="season" data-season="{{$seasonNum}}">
+            <div class="season-header">Season {{$seasonNum}}</div>
+            <ul class="episodes">
+                {{range $ep := seq 1 $epCount}}
+                <li data-ep="{{$ep}}">Episode {{$ep}}</li>
+                {{end}}
+            </ul>
+        </div>
+        {{end}}
+    </div>
+    <div id="player">
+        <video id="vplayer" controls></video>
+    </div>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const seasons = document.querySelectorAll(".season");
+    
+    seasons.forEach(season => {
+        const header = season.querySelector(".season-header");
+        const list = season.querySelector(".episodes");
+
+        header.addEventListener("click", () => {
+            document.querySelectorAll(".episodes").forEach(l => {
+                if (l !== list) l.style.display = "none";
+            });
+            document.querySelectorAll(".season-header").forEach(h => h.classList.remove("active"));
+            
+            header.classList.add("active");
+            list.style.display = (list.style.display === "block") ? "none" : "block";
+        });
+
+        season.querySelectorAll("li").forEach(ep => {
+            ep.addEventListener("click", (e) => {
+                e.stopPropagation();
+                document.querySelectorAll(".episodes li").forEach(li => li.classList.remove('active'));
+                ep.classList.add('active');
+
+                const sNum = season.dataset.season;
+                const eNum = ep.dataset.ep;
+                
+                const video = document.getElementById('vplayer');
+                video.src = "/films/{{.FolderAttr}}/Season" + sNum + "/Episode" + eNum + ".mp4";
+                video.load();
+                video.play();
+            });
+        });
+    });
+});
+</script>
+</body>
+</html>`
+
+const tmplChannel = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{.Name}}</title>
+<style>
+:root{--bg:#0a0a0a;--panel:#141414;--panel2:#1b1b1b;--border:#2a2a2a;--text:#fff;--muted:#9a9a9a;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui;}
+body{background:var(--bg);color:var(--text);}
+#topbar{padding:14px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:center;}
+#back{background:var(--panel2);border:1px solid var(--border);padding:8px 14px;border-radius:10px;color:white;cursor:pointer;}
+#content{display:flex;height:calc(100vh - 60px);}
+#sidebar{width:340px;background:var(--panel);border-right:1px solid var(--border);padding:14px;overflow:auto;}
+#search{width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:white;outline:none;margin-bottom:12px;}
+.video-item{padding:12px;margin:6px 0;background:var(--panel2);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--muted);}
+.video-item:hover{background:#222;color:white;}
+.video-item.active{background:#2a2a2a;color:#fff;border-color:#555;}
+#player{flex:1;display:flex;justify-content:center;align-items:center;padding:20px;flex-direction:column;gap:10px;}
+video{width:100%;height:100%;border-radius:14px;background:black;box-shadow:0 0 30px rgba(0,0,0,0.6);}
+#error-log{color:#ff4a4a;font-size:14px;display:none;background:rgba(255,0,0,0.1);padding:10px;border-radius:8px;width:100%;text-align:center;}
+</style>
+</head>
+<body>
+<div id="topbar">
+    <button id="back" onclick="window.history.back()">← Back</button>
+    <h1 class="movie-title">{{.Name}}</h1>
+</div>
+<div id="content">
+    <div id="sidebar">
+        <input id="search" placeholder="Search videos..." oninput="filterVideos()">
+        <div id="video-list">
+            {{range $file := .Videos}}
+            <div class="video-item" data-src="{{$file}}">{{cleanName $file}}</div>
+            {{end}}
+        </div>
+    </div>
+    <div id="player">
+        <div id="error-log"></div>
+        <video id="vplayer" controls></video>
+    </div>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const video = document.getElementById('vplayer');
+    const errLog = document.getElementById('error-log');
+
+    // Отслеживаем ошибки видео-плеера для дебага
+    video.addEventListener('error', () => {
+        errLog.style.display = "block";
+        if (video.error) {
+            switch (video.error.code) {
+                case 1: errLog.textContent = "Загрузка прервана пользователем."; break;
+                case 2: errLog.textContent = "Ошибка сети при загрузке видео."; break;
+                case 3: errLog.textContent = "Ошибка декодирования видео (битый кодек/файл)."; break;
+                case 4: errLog.textContent = "Видео не найдено по указанному пути (404 Not Found). Текущий URL: " + video.src; break;
+                default: errLog.textContent = "Неизвестная ошибка плеера."; break;
+            }
+        }
+    });
+
+    document.querySelectorAll(".video-item").forEach(item => {
+        item.addEventListener("click", () => {
+            document.querySelectorAll(".video-item").forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            errLog.style.display = "none";
+
+            const file = item.dataset.src;
+            
+            // Убрали encodeURIComponent. Передаем чистую строку, браузер сам ее экранирует для HTTP-запроса.
+            // Путь строится как: /films/Имя_Папки/Имя_Файла.mp4
+            video.src = "/films/{{.FolderAttr}}/" + file;
+            video.load();
+            video.play().catch(err => {
+                console.log("Автозапуск заблокирован браузером или ошибка:", err);
+            });
+        });
+    });
+});
+
+function filterVideos() {
+    let filter = document.getElementById('search').value.toLowerCase();
+    document.querySelectorAll('.video-item').forEach(item => {
+        if(item.textContent.toLowerCase().includes(filter)) {
+            item.style.display = "";
+        } else {
+            item.style.display = "none";
+        }
+    });
+}
+</script>
+</body>
+</html>`
 
 func deletePack(w http.ResponseWriter, r *http.Request) {
 	// Проверяем метод (наш фронт шлёт DELETE)
