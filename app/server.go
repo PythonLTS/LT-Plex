@@ -11,11 +11,15 @@ import (
 	"strings"
 	"sync" // Добавлено для потокобезопасности
 	"time"
+	"syscall"
 	"database/sql"
-	_"github.com/mattn/go-sqlite3"
 	"github.com/golang-jwt/jwt"
 	"github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/bcrypt"
+	_ "github.com/mattn/go-sqlite3"
+
+
+	"fmt"
 )
 
 var base *sql.DB
@@ -41,6 +45,48 @@ type Claims struct {
 	Username string `json:"username"`
 	jwt.StandardClaims
 }
+
+type StorageInfoResponse struct {
+	Movies    int    `json:"movies"`
+	Channels  int    `json:"channels"`
+	Series    int    `json:"series"`
+	FreeSpace string `json:"freeSpace"`
+}
+
+type FolderMeta struct {
+	Name string `json:"Name"`
+	Type string `json:"Type"`
+}
+
+func getDiskCapacity()string{
+
+	var stat syscall.Statfs_t
+	
+	if err := syscall.Statfs("/", &stat); err != nil {
+		log.Fatalf("Ошибка: %v", err)
+	}
+
+	// Считаем чистые байты -> переводим в Мегабайты
+	freeBytes := stat.Bavail * uint64(stat.Bsize)
+	freeMB := float64(freeBytes) / (1024 * 1024)
+
+	// Фильтруем на лету для вывода в лог
+	var finalLog string
+	if freeMB >= 1024 {
+		freeGB := freeMB / 1024
+		finalLog = fmt.Sprintf("%.2f GB", freeGB)
+		log.Println(finalLog)
+		return finalLog
+	} else {
+		finalLog = fmt.Sprintf("%.2f MB", freeMB)
+		log.Println(finalLog)
+		return finalLog
+	}
+
+	// Выводим итоговый лог
+
+}
+
 
 func allFilmsPage(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("jwt")
@@ -382,8 +428,97 @@ func hashData(password string) string {
 	return string(hash)
 }
 
+func countContentByMeta(root string) (movies int, series int, channels int) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		log.Println("Ошибка чтения корневой директории контента:", err)
+		return 0, 0, 0
+	}
+
+	for _, entry := range entries {
+		// Нас интересуют только папки (например, Mr_Robot)
+		if !entry.IsDir() {
+			continue
+		}
+
+		// Путь к meta.json внутри этой папки
+		metaPath := fmt.Sprintf("%s/%s/meta.json", root, entry.Name())
+
+		// Проверяем, существует ли файл meta.json
+		if _, err := os.Stat(metaPath); os.IsNotExist(err) {
+			continue // Если мета-файла нет, пропускаем папку
+		}
+
+		// Читаем meta.json
+		metaData, err := os.ReadFile(metaPath)
+		if err != nil {
+			log.Printf("Ошибка чтения файла %s: %v", metaPath, err)
+			continue
+		}
+
+		// Парсим JSON
+		var meta FolderMeta
+		if err := json.Unmarshal(metaData, &meta); err != nil {
+			log.Printf("Ошибка парсинга JSON в %s: %v", metaPath, err)
+			continue
+		}
+
+		// Фильтруем и инкрементируем нужный счетчик
+		switch strings.ToLower(meta.Type) {
+		case "movie":
+			movies++
+		case "series":
+			series++
+		case "channel":
+			channels++
+		}
+	}
+
+	return movies, series, channels
+}
+
+func StorageInfo(w http.ResponseWriter, r *http.Request) {
+	queryParams := r.URL.Query()
+	mode := queryParams.Get("mode")
+
+	if mode == "list" {
+		// 1. Получаем свободное место на диске
+		freeMemory := getDiskCapacity()
+
+		// 2. Считаем контент по мета-файлам в "UserData/Films"
+		moviesCount, seriesCount, channelsCount := countContentByMeta("UserData/Films")
+
+		// 3. Собираем структуру ответа
+		response := StorageInfoResponse{
+			Movies:    moviesCount,
+			Channels:  channelsCount,
+			Series:    seriesCount,
+			FreeSpace: freeMemory,
+		}
+
+		// 4. Отдаем JSON на фронтенд
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Твои логи для других режимов
+	if mode == "series" {
+		log.Println("Requested mode: series")
+	}
+	if mode == "movie" {
+		log.Println("Requested mode: movie")
+	}
+	if mode == "channel" {
+		log.Println("Requested mode: channel")
+	}
+
+	http.Error(w, "Missing or invalid 'mode' parameter.", http.StatusBadRequest)
+}
+
 func storageControl(w http.ResponseWriter,r *http.Request){
 	http.ServeFile(w,r,"pages/StorageControl.html")
+	
 }
 
 func addPack(w http.ResponseWriter,r *http.Request){
@@ -594,7 +729,7 @@ func main() {
 	http.HandleFunc("/api/loginData/", getdataLogin)
 	http.HandleFunc("/api/addPackage", addPack)
 	http.HandleFunc("/api/deletePackage", deletePack)
-	http.HandleFunc("/api/StorageInfo")
+	http.HandleFunc("/api/StorageInfo", StorageInfo)
 	http.HandleFunc("/StorageControl", storageControl)
 	http.HandleFunc("/qrdata/", pushqr)
 	http.HandleFunc("/data-confirm/", qrConfirm)
