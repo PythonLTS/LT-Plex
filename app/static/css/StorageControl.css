@@ -195,7 +195,7 @@ body {
     background: #1e1e1e; /* Темный фон в стиле Plex */
     border: 1px solid #636363;
     border-radius: 12px;
-    padding: 24px;
+    padding: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -494,7 +494,7 @@ body {
 .embedded-zone { padding: 15px; min-height: 90px; }
 
 .dropzone-text { font-size: 15px; color: #fff; font-weight: 500; margin-bottom: 5px; }
-.dropzone-hint { font-size: 12px; color: #777; padding: 0 10px; }
+.dropzone-hint { font-size: 12px; color: #a0a0a0; padding: 0 10px; }
 
 /* Специфичные блоки для сериала и канала */
 .season-header { font-size: 14px; color: #888; font-weight: bold; text-transform: uppercase; }

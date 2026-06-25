@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"archive/zip"
 	"html/template"
-
+	"net/url"
 	"fmt"
 )
 
@@ -605,13 +605,21 @@ func GenerateHTML(meta MetaData, folderName string, packDir string) (string, err
 	default:
 		return "", nil
 	}
-
+	if decoded, err := url.QueryUnescape(folderName); err == nil {
+        folderName = decoded
+    }
+    
+    // Декодируем путь к папке, если он тоже заэнкожен
+    if decodedDir, err := url.QueryUnescape(packDir); err == nil {
+        packDir = decodedDir
+    }
 	// Для каналов собираем реальные имена файлов из папки
 	var videoFiles []string
 	if meta.Type == "channel" {
 		files, err := os.ReadDir(packDir)
 		if err == nil {
 			for _, f := range files {
+				// Приводим к нижнему регистру для надежной проверки расширения (.MP4, .mp4)
 				if !f.IsDir() && strings.HasSuffix(strings.ToLower(f.Name()), ".mp4") {
 					videoFiles = append(videoFiles, f.Name())
 				}
@@ -632,6 +640,10 @@ func GenerateHTML(meta MetaData, folderName string, packDir string) (string, err
 		"cleanName": func(filename string) string {
 			name := strings.TrimSuffix(filename, filepath.Ext(filename))
 			return strings.ReplaceAll(name, "_", " ")
+		},
+		// ВАЖНО: Хелпер, который спасает русские буквы в путях/ссылках
+		"safeURL": func(u string) template.URL {
+			return template.URL(u)
 		},
 	}
 
@@ -665,6 +677,16 @@ func addPack(w http.ResponseWriter, r *http.Request) {
 	if fileName == "" {
 		http.Error(w, "missing file name", http.StatusBadRequest)
 		return
+	}
+
+	// ИСПРАВЛЕНИЕ: Декодируем имя файла из URL-закодированной строки в нормальный UTF-8 (русский)
+	if decoded, err := url.QueryUnescape(fileName); err == nil {
+		fileName = decoded
+	}
+
+	// Дополнительный фикс: если фронт по какой-то причине шлет "lsИмя_Файла", срезаем этот мусор
+	if strings.HasPrefix(fileName, "ls") && len(fileName) > 2 {
+		fileName = strings.TrimPrefix(fileName, "ls")
 	}
 
 	fileName = filepath.Base(fileName)
@@ -784,6 +806,7 @@ const tmplMovie = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{.Name}}</title>
 <style>
 :root{--bg:#0a0a0a;--panel:#141414;--panel2:#1b1b1b;--border:#2a2a2a;--text:#ffffff;--muted:#9a9a9a;}
@@ -791,12 +814,22 @@ const tmplMovie = `<!DOCTYPE html>
 body{background:var(--bg);color:var(--text);}
 #topbar{display:flex;align-items:center;gap:14px;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--border);}
 #back{background:var(--panel2);border:1px solid var(--border);padding:8px 14px;border-radius:10px;color:white;cursor:pointer;}
+#topbar h1{font-size:1.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #content{display:flex;height:calc(100vh - 60px);}
 #info{width:320px;background:var(--panel);border-right:1px solid var(--border);padding:20px;}
 #info h2{margin-bottom:8px;}
 #info p{color:var(--muted);margin-top:10px;}
 #player{flex:1;display:flex;align-items:center;justify-content:center;padding:20px;}
-video{width:100%;height:100%;border-radius:14px;background:black;box-shadow:0 0 30px rgba(0,0,0,0.6);}
+video{width:100%;height:auto;max-height:100%;border-radius:14px;background:black;box-shadow:0 0 30px rgba(0,0,0,0.6);}
+
+@media (max-width: 768px) {
+    #topbar{padding:10px 14px;}
+    #topbar h1{font-size:1.2rem;}
+    #content{flex-direction: column-reverse;height: auto;}
+    #info{width:100%;border-right:none;border-top:1px solid var(--border);padding:16px;}
+    #player{padding:10px;}
+    video{border-radius:8px;}
+}
 </style>
 </head>
 <body>
@@ -820,6 +853,7 @@ const tmplSeries = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{.Name}}</title>
 <style>
 :root{--bg:#0a0a0a;--panel:#141414;--panel2:#1b1b1b;--border:#2a2a2a;--text:#fff;--muted:#9a9a9a;--accent:#e5a00d;}
@@ -827,6 +861,7 @@ const tmplSeries = `<!DOCTYPE html>
 body{background:var(--bg);color:var(--text);}
 #topbar{padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:center;}
 #back{background:var(--panel2);border:1px solid var(--border);padding:8px 14px;border-radius:10px;color:white;cursor:pointer;}
+#topbar h1{font-size:1.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #content{display:flex;height:calc(100vh - 60px);}
 #sidebar{width:340px;background:var(--panel);border-right:1px solid var(--border);overflow:auto;padding:16px;}
 .season{margin-bottom:10px;}
@@ -837,7 +872,16 @@ body{background:var(--bg);color:var(--text);}
 .episodes li:hover{background:#222;color:white;}
 .episodes li.active{background:var(--accent);color:black;font-weight:600;border:none;}
 #player{flex:1;display:flex;justify-content:center;align-items:center;padding:20px;}
-video{width:100%;height:100%;border-radius:14px;background:black;box-shadow:0 0 30px rgba(0,0,0,0.6);}
+video{width:100%;height:auto;max-height:100%;border-radius:14px;background:black;box-shadow:0 0 30px rgba(0,0,0,0.6);}
+
+@media (max-width: 768px) {
+    #topbar{padding:10px 14px;}
+    #topbar h1{font-size:1.2rem;}
+    #content{flex-direction: column;height: auto;}
+    #player{padding:10px;order: 1;}
+    #sidebar{width:100%;border-right:none;border-top:1px solid var(--border);padding:16px;order: 2;overflow:visible;}
+    video{border-radius:8px;}
+}
 </style>
 </head>
 <body>
@@ -894,6 +938,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 video.src = "/films/{{.FolderAttr}}/Season" + sNum + "/Episode" + eNum + ".mp4";
                 video.load();
                 video.play();
+                
+                // Скролл к плееру после выбора серии на мобилках
+                if(window.innerWidth <= 768) {
+                    document.getElementById('player').scrollIntoView({ behavior: 'smooth' });
+                }
             });
         });
     });
@@ -906,6 +955,7 @@ const tmplChannel = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{.Name}}</title>
 <style>
 :root{--bg:#0a0a0a;--panel:#141414;--panel2:#1b1b1b;--border:#2a2a2a;--text:#fff;--muted:#9a9a9a;}
@@ -913,6 +963,7 @@ const tmplChannel = `<!DOCTYPE html>
 body{background:var(--bg);color:var(--text);}
 #topbar{padding:14px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:center;}
 #back{background:var(--panel2);border:1px solid var(--border);padding:8px 14px;border-radius:10px;color:white;cursor:pointer;}
+#topbar h1{font-size:1.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #content{display:flex;height:calc(100vh - 60px);}
 #sidebar{width:340px;background:var(--panel);border-right:1px solid var(--border);padding:14px;overflow:auto;}
 #search{width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:white;outline:none;margin-bottom:12px;}
@@ -920,8 +971,17 @@ body{background:var(--bg);color:var(--text);}
 .video-item:hover{background:#222;color:white;}
 .video-item.active{background:#2a2a2a;color:#fff;border-color:#555;}
 #player{flex:1;display:flex;justify-content:center;align-items:center;padding:20px;flex-direction:column;gap:10px;}
-video{width:100%;height:100%;border-radius:14px;background:black;box-shadow:0 0 30px rgba(0,0,0,0.6);}
+video{width:100%;height:auto;max-height:100%;border-radius:14px;background:black;box-shadow:0 0 30px rgba(0,0,0,0.6);}
 #error-log{color:#ff4a4a;font-size:14px;display:none;background:rgba(255,0,0,0.1);padding:10px;border-radius:8px;width:100%;text-align:center;}
+
+@media (max-width: 768px) {
+    #topbar{padding:10px 14px;}
+    #topbar h1{font-size:1.2rem;}
+    #content{flex-direction: column;height: auto;}
+    #player{padding:10px;order: 1;}
+    #sidebar{width:100%;border-right:none;border-top:1px solid var(--border);padding:16px;order: 2;overflow:visible;}
+    video{border-radius:8px;}
+}
 </style>
 </head>
 <body>
@@ -948,7 +1008,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const video = document.getElementById('vplayer');
     const errLog = document.getElementById('error-log');
 
-    // Отслеживаем ошибки видео-плеера для дебага
     video.addEventListener('error', () => {
         errLog.style.display = "block";
         if (video.error) {
@@ -970,13 +1029,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const file = item.dataset.src;
             
-            // Убрали encodeURIComponent. Передаем чистую строку, браузер сам ее экранирует для HTTP-запроса.
-            // Путь строится как: /films/Имя_Папки/Имя_Файла.mp4
             video.src = "/films/{{.FolderAttr}}/" + file;
             video.load();
             video.play().catch(err => {
                 console.log("Автозапуск заблокирован браузером или ошибка:", err);
             });
+
+            // Скролл к плееру после выбора видео на мобилках
+            if(window.innerWidth <= 768) {
+                document.getElementById('player').scrollIntoView({ behavior: 'smooth' });
+            }
         });
     });
 });

@@ -234,7 +234,7 @@ function createLTpack() {
                         <div class="season-header">Выбран ${currentSeasonIdx + 1}</div>
                         <div class="upload-dropzone embedded-zone" id="episodeDrop">
                             <span class="dropzone-text">Добавить Серию</span>
-                            <span class="dropzone-hint">Или если уже загружена то название файла и сделать кликабельной чтоб удалить</span>
+                            <span class="dropzone-hint">Внимание!: называйте серии в виде Episode1 Episode2 .. </span>
                         </div>
                         <div class="episode-list"></div>
                     `;
@@ -395,8 +395,7 @@ function createLTpack() {
             // 1. Добавляем обложку (если она загружена)
             if (packData.cover) {
                 // Извлекаем расширение файла обложки (обычно jpg или png)
-                const coverExt = packData.cover.name.split('.').pop();
-                zip.file(`${packData.name}.${coverExt}`, packData.cover);
+                zip.file(`${packData.name}.jpeg`, packData.cover);
             }
 
             // 2. Формируем структуру и добавляем видео-файлы
